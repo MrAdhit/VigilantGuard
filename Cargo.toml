@@ -1,0 +1,11 @@
+[package]
+name = "vigilant_guard"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+atomic_float = "0.1.0"
+chrono = "0.4.24"
+tokio = { version = "1.27.0", features = ["full", "rt"] }
