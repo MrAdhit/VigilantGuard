@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use serde_json::Value;
 use tokio::{net::tcp::{OwnedReadHalf, OwnedWriteHalf}, sync::Mutex};
-use valence_protocol::{Encode, Decode, text::Text, var_int::VarInt, packet::s2c::login::LoginQueryRequestS2c};
+use valence_protocol::{Encode, Decode, text::Text, var_int::VarInt, packet::{s2c::login::LoginQueryRequestS2c, c2s::login::LoginHelloC2s}};
 
 use crate::{packet::*, *};
 
@@ -78,8 +78,12 @@ impl<'a> MiddleInterceptor<'a> {
     }
 
     pub async fn c2s_handshake(&mut self, ping_ip_cache: Arc<Mutex<HashMap<i64, String>>>, packet_state: Arc<Mutex<PacketState>>) {
-        if let Ok(packet) = C2sHandshakePacket::decode(&mut self.array_buffer) {
+        if let Ok(mut packet) = C2sHandshakePacket::decode(&mut self.array_buffer) {
             *packet_state.lock().await = packet.next;
+
+            if IP_FORWARD {
+                packet.addr = format!("{addr}|{player_addr}", addr = packet.addr, player_addr = self.reader.peer_addr().unwrap().ip().to_string());
+            }
 
             encode_packet!(0x00, packet, self.response_buffer);
 
@@ -115,12 +119,19 @@ impl<'a> MiddleInterceptor<'a> {
                         });
                         rt.shutdown_background();
                     }
-                },
+                }
+                PacketState::Login => {
+                    let mut buf = [0u8; 128];
+                    self.array_buffer.read(&mut buf).await.unwrap();
+
+                    if let Ok(packet) = LoginHelloC2s::decode_packet(&mut &buf[1..]) {
+                        encode_packet!(0x00, packet, self.response_buffer);
+                    }
+                }
                 _ => {
                     self.passthrough();
                 }
             }
-
         }
     }
 
@@ -165,7 +176,7 @@ impl<'a> MiddleInterceptor<'a> {
             }
         }
 
-        self.s2c_login_plugin().await;
+        // self.s2c_login_plugin().await;
 
         self.passthrough();
     }

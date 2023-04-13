@@ -19,6 +19,7 @@ static mut TOTAL_UPLOAD: AtomicF64 = AtomicF64::new(0.0);
 
 const PING_PROTECTION: bool = true;
 const IP_CONCURRENT_LIMIT: usize = 1;
+const IP_FORWARD: bool = true;
 
 async fn middle_intercept(
     reader: &mut OwnedReadHalf, 
@@ -78,12 +79,12 @@ async fn middle_intercept(
                     // TODO: possibly intercept plugin message?
                     middle_interceptor.s2c_login(ip_cache).await;
 
-                    printhex!(middle_interceptor.array_buffer);
+                    // printhex!(middle_interceptor.array_buffer);
 
-                    if let Ok(packet) = LoginHelloS2c::decode(&mut middle_interceptor.array_buffer) {
-                        dbg!(packet);
-                    }
-                    
+                    // if let Ok(packet) = LoginHelloS2c::decode(&mut middle_interceptor.array_buffer) {
+                    //     dbg!(packet);
+                    // }
+
                     *packet_state_arc.lock().await = PacketState::Play;
                 }
                 _ => {
@@ -190,7 +191,7 @@ async fn accept_loop(proxy_address: SocketAddr, server_address: SocketAddr) {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let proxy_address = "127.0.0.1:25565";
-    let server_address = "pn-32gb.rapstore.online:25565";
+    let server_address = "127.0.0.1:25577";
 
     let proxy_address = proxy_address.to_socket_addrs()?.next().unwrap();
     let server_address = server_address.to_socket_addrs()?.next().unwrap();
