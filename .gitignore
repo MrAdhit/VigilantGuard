@@ -21,6 +21,7 @@ Cargo.lock
 # Built Visual Studio Code Extensions
 *.vsix
 
+old
 *.old
 
 *.ignore.*

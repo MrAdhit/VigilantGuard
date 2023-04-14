@@ -19,7 +19,7 @@ macro_rules! encode_packet {
         w.push($packet_id);
         $packet.encode(&mut w).unwrap();
         let mut len = Vec::new();
-        VarInt::encode(&VarInt(w.len() as i32), &mut len).unwrap();
+        valence_protocol::var_int::VarInt::encode(&valence_protocol::var_int::VarInt(w.len() as i32), &mut len).unwrap();
         $writer.append(&mut len);
         $writer.append(&mut w);
     };

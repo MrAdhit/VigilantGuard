@@ -1,9 +1,20 @@
 use std::borrow::Cow;
 
 use serde::{Serialize, Deserialize};
-use valence_protocol::{Encode, Decode, var_int::VarInt, text::Text};
+use valence_protocol::{Encode, Decode, var_int::VarInt, text::Text, uuid::Uuid};
+use vg_macro::{PacketToBuffer, parse_packet_header};
+
+pub trait ToBuffer {
+    fn to_buffer(&mut self) -> Vec<u8>;
+}
 
 #[derive(Debug, Encode, Decode)]
+pub struct LenPacket {
+    len: VarInt
+}
+
+#[parse_packet_header]
+#[derive(Debug, Encode, Decode, PacketToBuffer)]
 pub struct C2sHandshakePacket {
     pub protocol: VarInt,
     pub addr: String,
@@ -11,18 +22,25 @@ pub struct C2sHandshakePacket {
     pub next: PacketState,
 }
 
-#[derive(Debug, Encode, Decode)]
-pub struct C2sQueryRequest {
-    pub len: u8,
-    pub payload: u8
+#[parse_packet_header]
+#[derive(Debug, Encode, Decode, PacketToBuffer)]
+pub struct C2sQueryRequest {}
+
+#[parse_packet_header]
+#[derive(Debug, Encode, Decode, PacketToBuffer)]
+pub struct C2sLoginStart {
+    name: String,
+    uuid: Option<Uuid>
 }
 
-#[derive(Debug, Encode, Decode)]
+#[parse_packet_header]
+#[derive(Debug, Encode, Decode, PacketToBuffer)]
 pub struct C2sPingRequest {
     pub payload: u64,
 }
 
-#[derive(Debug, Encode, Decode)]
+#[parse_packet_header]
+#[derive(Debug, Encode, Decode, PacketToBuffer)]
 pub struct S2cQueryResponse<'a> {
     pub json: &'a str,
 }
@@ -75,37 +93,7 @@ pub enum PacketStage {
     C2sQueryRequest,
     S2cQueryResponse,
     C2sPingRequest,
-    S2cPingResponse
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ServerListJson {
-    pub version: ServerListJsonVersion,
-    pub players: ServerListJsonPlayer,
-    pub description: Text,
-    pub favicon: Option<String>,
-    pub enforces_secure_chat: Option<bool>
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ServerListJsonVersion {
-    name: String,
-    protocol: u16,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ServerListJsonPlayer {
-    max: usize,
-    online: usize,
-    sample: Option<Vec<ServerListJsonPlayerList>>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ServerListJsonPlayerList {
-    name: String,
-    id: String,
+    S2cPingResponse,
+    C2sLoginStart,
+    S2cEncryptionRequest,
 }
