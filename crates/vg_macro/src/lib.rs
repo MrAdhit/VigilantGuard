@@ -22,7 +22,7 @@ pub fn derive_to_buffer(input: TokenStream) -> TokenStream {
                     self.encode(&mut writer).unwrap();
                     let mut writer = &writer[..];
                     LenPacket::decode(&mut writer).unwrap();
-                    self.len = VarInt::from(writer.len() as i32);
+                    self.len = VarInt(writer.len() as i32);
                     let mut writer = Vec::new();
                     self.encode(&mut writer).unwrap();
                     writer
@@ -39,7 +39,7 @@ pub fn derive_to_buffer(input: TokenStream) -> TokenStream {
                     self.encode(&mut writer).unwrap();
                     let mut writer = &writer[..];
                     LenPacket::decode(&mut writer).unwrap();
-                    self.len = VarInt::from(writer.len() as i32);
+                    self.len = VarInt(writer.len() as i32);
                     let mut writer = Vec::new();
                     self.encode(&mut writer).unwrap();
                     writer

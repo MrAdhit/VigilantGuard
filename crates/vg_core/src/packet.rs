@@ -1,7 +1,10 @@
 use std::borrow::Cow;
 
-use serde::{Serialize, Deserialize};
-use valence_protocol::{Encode, Decode, var_int::VarInt, text::Text, uuid::Uuid};
+use valence_protocol::{Encode, Decode};
+use valence_protocol::var_int::VarInt;
+use valence_protocol::text::Text;
+use valence_protocol::uuid::Uuid;
+
 use vg_macro::{PacketToBuffer, parse_packet_header};
 
 pub trait ToBuffer {
@@ -45,13 +48,8 @@ pub struct S2cQueryResponse<'a> {
     pub json: &'a str,
 }
 
-#[derive(Debug, Encode, Decode)]
-pub struct PacketHeader {
-    pub len: VarInt,
-    pub packet_id: VarInt,
-}
-
-#[derive(Debug, Encode, Decode)]
+#[parse_packet_header]
+#[derive(Debug, Encode, Decode, PacketToBuffer)]
 pub struct S2cDisconnect<'a> {
     pub reason: Cow<'a, Text>,
 }

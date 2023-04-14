@@ -1,5 +1,3 @@
-#![feature(forget_unsized)]
-
 mod interceptor;
 pub mod packet;
 pub mod macros;
@@ -9,8 +7,8 @@ use std::{net::{SocketAddr, ToSocketAddrs}, thread, time::Duration, sync::{atomi
 use atomic_float::AtomicF64;
 use interceptor::MiddleInterceptor;
 use packet::*;
-use tokio::{net::{TcpStream, TcpListener, tcp::{OwnedReadHalf, OwnedWriteHalf}}, io::{AsyncWriteExt, AsyncReadExt}, sync::Mutex, runtime::Runtime};
-use valence_protocol::{Decode, Encode, packet::{s2c::login::{LoginSuccessS2c, LoginHelloS2c}, S2cLoginPacket}, Packet};
+
+use tokio::{net::{TcpStream, TcpListener}, io::{AsyncWriteExt, AsyncReadExt}, sync::Mutex, runtime::Runtime};
 
 use crate::interceptor::FrontInterceptor;
 
@@ -31,7 +29,7 @@ async fn proxy(client: TcpStream, server: TcpStream, state: PacketState, ip_cach
     let (mut buf, mut buf1) = ([0u8; 4096], [0u8; 4096]);
 
     loop {
-        if FrontInterceptor::init(&mut client_reader, &mut client_writer, packet_stage.clone()).await.intercepted {
+        if FrontInterceptor::init(&mut client_reader, &mut client_writer, packet_stage.clone(), connections.clone(), ip_cache.clone()).await.intercepted {
             break;
         }
 
@@ -95,7 +93,7 @@ async fn accept_loop(proxy_address: SocketAddr, server_address: SocketAddr) {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let proxy_address = "127.0.0.1:25565";
-    let server_address = "127.0.0.1:25561";
+    let server_address = "127.0.0.1:25577";
 
     let proxy_address = proxy_address.to_socket_addrs()?.next().unwrap();
     let server_address = server_address.to_socket_addrs()?.next().unwrap();
