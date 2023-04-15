@@ -60,12 +60,14 @@ impl<'a> FrontInterceptor<'a> {
 
                     if connections > &IP_CONCURRENT_LIMIT {
                         self.writer.write(&disconnect_with_reason(Text::from("More connection"))).await.unwrap();
+                        self.info_log("Connection rejected because: Max connection excedeed");
                         self.intercepted();
                     }
 
                     if PING_PROTECTION {
                         if let None = ip_cache_arc.lock().await.values().find(|&v| v == &ip) {
                             self.writer.write(&disconnect_with_reason(Text::from("Not cached"))).await.unwrap();
+                            self.info_log("Connection rejected because: IP not cached");
                             self.intercepted();
                         }
                     }
@@ -73,6 +75,10 @@ impl<'a> FrontInterceptor<'a> {
                 _ => { }
             }
         }
+    }
+
+    fn info_log(&self, msg: &str) {
+        info!("{}", colorizer!("[/c(dark_blue){}c(reset)] {}", self.writer.peer_addr().unwrap().to_string(), msg));
     }
     
     async fn reply_ping(&mut self) {

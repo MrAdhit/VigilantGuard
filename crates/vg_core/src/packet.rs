@@ -11,11 +11,6 @@ pub trait ToBuffer {
     fn to_buffer(&mut self) -> Vec<u8>;
 }
 
-#[derive(Debug, Encode, Decode)]
-pub struct LenPacket {
-    len: VarInt
-}
-
 #[parse_packet_header]
 #[derive(Debug, Encode, Decode, PacketToBuffer)]
 pub struct C2sHandshakePacket {
