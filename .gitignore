@@ -28,3 +28,5 @@ old
 *.ignore
 
 log
+
+*.db.txt

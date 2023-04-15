@@ -1,8 +1,10 @@
 mod interceptor;
 pub mod packet;
 pub mod macros;
+pub mod guardian;
+pub mod db;
 
-use std::{net::{SocketAddr, ToSocketAddrs}, thread, time::Duration, sync::{Arc, atomic::Ordering}, collections::HashMap, io::{Write, BufWriter}};
+use std::{net::{SocketAddr, ToSocketAddrs}, thread, time::Duration, sync::{Arc, atomic::Ordering}, collections::HashMap, io::{Write, BufWriter, ErrorKind, Read}, fs::File};
 
 use atomic_float::AtomicF64;
 use interceptor::MiddleInterceptor;
@@ -189,6 +191,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server_address = "127.0.0.1:25577";
 
     setup_terminal().unwrap();
+
+    thread::spawn(move || { guardian::ip_blacklisted("140.213.161.184".to_string()); });
 
     let proxy_address = proxy_address.to_socket_addrs()?.next().unwrap();
     let server_address = server_address.to_socket_addrs()?.next().unwrap();
