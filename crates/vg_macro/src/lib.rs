@@ -1,4 +1,6 @@
-use proc_macro::{TokenStream};
+use std::collections::HashMap;
+
+use proc_macro::{TokenStream, Literal};
 use quote::__private::Span;
 use syn::{parse_macro_input, DeriveInput, Ident};
 
@@ -66,4 +68,43 @@ pub fn derive_to_buffer(input: TokenStream) -> TokenStream {
 pub fn parse_packet_header(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let ret = item.to_string().replace("{", "{pub len : VarInt , pub packet_id : VarInt , ");
     ret.parse().unwrap()
+}
+
+enum HashMapParse {
+    KEY,
+    VAL
+}
+
+#[proc_macro]
+pub fn create_colorizer(input: TokenStream) -> TokenStream {
+    let mut map: HashMap<String, String> = HashMap::new();
+
+    let mut stage = HashMapParse::KEY;
+    let mut temp_persist = String::new();
+    for (i, t) in input.into_iter().enumerate() {
+        if !t.to_string().contains("\"") { continue; }
+        let ident = t.to_string().replace("\"", "");
+
+        match &stage {
+            HashMapParse::KEY => {
+                temp_persist = ident;
+                stage = HashMapParse::VAL;
+            }
+            HashMapParse::VAL => {
+                map.insert(temp_persist.clone(), ident);
+                stage = HashMapParse::KEY;
+            },
+        }
+    }
+
+    let mut rpl_vec = Vec::new();
+
+    for (k, v) in map {
+        rpl_vec.push(format!(".replace(\"c({k})\", \"{v}\")"));
+    }
+    
+    let rpl = rpl_vec.join("");    
+    let res = format!(r###"#[macro_export]{}macro_rules! colorizer {{($fmt_str:literal) => {{{{format!($fmt_str){rpl}}}}};($fmt_str:literal, $($args:expr),*) => {{{{format!($fmt_str, $($args),*){rpl}}}}};}}{}pub use colorizer as coloriser;"###, "\n", "\n");
+
+    res.parse().unwrap()
 }

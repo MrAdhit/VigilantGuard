@@ -4,7 +4,8 @@ use log::{LevelFilter, info, error};
 use log4rs::{encode::{pattern::PatternEncoder}, Config, config::{Appender, Root}};
 use rustyline::{DefaultEditor, error::ReadlineError, ExternalPrinter};
 
-use crate::{colorizer, TOTAL_DOWNLOAD, TOTAL_UPLOAD};
+use crate::macros::coloriser;
+use crate::{TOTAL_DOWNLOAD, TOTAL_UPLOAD};
 
 use super::appender::LogAppender;
 
@@ -21,7 +22,7 @@ pub fn setup() -> Result<(), ()> {
 
                     match line.as_str() {
                         "stop" => {
-                            info!("{}", colorizer!("c(bright_red)Stopping"));
+                            info!("{}", coloriser!("c(bright_red)Stopping"));
                             std::process::exit(1);
                         }
                         "usage" => {
@@ -41,7 +42,7 @@ pub fn setup() -> Result<(), ()> {
                         std::process::exit(1);
                     }
 
-                    error!("{}", colorizer!("c(bright_red){}", err.to_string()));
+                    error!("{}", coloriser!("c(bright_red){}", err.to_string()));
                 },
             }
         }
