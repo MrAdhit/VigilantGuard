@@ -1,4 +1,4 @@
-use std::{sync::Arc, collections::HashMap, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use log::info;
 use serde_json::Value;
@@ -15,11 +15,10 @@ pub struct Interceptor<'a> {
     array_buffer: &'a [u8],
     response_buffer: Vec<u8>,
     passthrough: bool,
-    connections: Arc<Mutex<HashMap<String, usize>>>
 }
 
 impl<'a> Interceptor<'a> {
-    pub async fn init(reader: &'a mut OwnedReadHalf, writer: &'a mut OwnedWriteHalf, raw_buffer: &'a mut [u8; 4096], connections_arc: Arc<Mutex<HashMap<String, usize>>>, packet_stage_arc: Arc<Mutex<PacketStage>>, ip_cache: Arc<Mutex<HashMap<i64, String>>>) -> (usize, Option<Interceptor<'a>>) {        
+    pub async fn init(reader: &'a mut OwnedReadHalf, writer: &'a mut OwnedWriteHalf, raw_buffer: &'a mut [u8; 4096], packet_stage_arc: Arc<Mutex<PacketStage>>) -> (usize, Option<Interceptor<'a>>) {        
         let read_len = reader.read(raw_buffer).await.unwrap_or(0);
         if read_len == 0 { return (0, None) }
 
@@ -34,14 +33,13 @@ impl<'a> Interceptor<'a> {
             array_buffer,
             response_buffer: Vec::new(),
             passthrough: false,
-            connections: connections_arc
         };
 
         loop {
             let packet_stage = packet_stage_arc.lock().await.clone();
             match packet_stage {
                 PacketStage::C2sHandshake => {
-                    interceptor.c2s_handshake(ip_cache.clone(), packet_stage_arc.clone()).await;
+                    interceptor.c2s_handshake(packet_stage_arc.clone()).await;
                 },
                 PacketStage::C2sQueryRequest => {
                     if let Ok(mut packet) = C2sQueryRequest::decode(&mut interceptor.array_buffer) {
@@ -94,7 +92,7 @@ impl<'a> Interceptor<'a> {
         self.passthrough = true;
     }
 
-    async fn c2s_handshake(&mut self, ip_cache: Arc<Mutex<HashMap<i64, String>>>, packet_stage_arc: Arc<Mutex<PacketStage>>) {
+    async fn c2s_handshake(&mut self, packet_stage_arc: Arc<Mutex<PacketStage>>) {
         if let Ok(mut packet) = C2sHandshakePacket::decode(&mut self.array_buffer) {
             if IP_FORWARD {
                 packet.addr = format!("{addr}|{player_addr}", addr = packet.addr, player_addr = self.reader.peer_addr().unwrap().ip().to_string());
@@ -112,7 +110,7 @@ impl<'a> Interceptor<'a> {
                             let timestamp = chrono::Utc::now().timestamp();
     
                             {
-                                let mut ip_cache = ip_cache.lock().await;
+                                let mut ip_cache = IP_CACHE.lock().await;
                                 if let Some(_) = ip_cache.values().find(|&v| v == &ip) {
                                     return;
                                 }
@@ -121,7 +119,7 @@ impl<'a> Interceptor<'a> {
     
                             std::thread::sleep(Duration::from_secs(10));
     
-                            ip_cache.lock().await.remove(&timestamp);
+                            IP_CACHE.lock().await.remove(&timestamp);
                         });
                     }
 

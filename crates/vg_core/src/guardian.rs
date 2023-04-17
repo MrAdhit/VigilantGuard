@@ -1,3 +1,5 @@
+use log::info;
+
 use crate::file::*;
 
 pub async fn ip_blacklisted(ip: String) -> bool {

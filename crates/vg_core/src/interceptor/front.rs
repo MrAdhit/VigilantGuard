@@ -1,4 +1,4 @@
-use std::{sync::Arc, collections::HashMap};
+use std::{sync::Arc};
 
 use log::info;
 use tokio::{net::tcp::{OwnedReadHalf, OwnedWriteHalf}, sync::Mutex, io::{AsyncWriteExt}};
@@ -16,7 +16,7 @@ pub struct Interceptor<'a> {
 }
 
 impl<'a> Interceptor<'a> {
-    pub async fn init(reader: &'a mut OwnedReadHalf, writer: &'a mut OwnedWriteHalf, packet_stage: Arc<Mutex<PacketStage>>, connections_arc: Arc<Mutex<HashMap<String, usize>>>, ip_cache_arc: Arc<Mutex<HashMap<i64, String>>>) -> Interceptor<'a> {
+    pub async fn init(reader: &'a mut OwnedReadHalf, writer: &'a mut OwnedWriteHalf, packet_stage: Arc<Mutex<PacketStage>>) -> Interceptor<'a> {
         let mut interceptor = Interceptor {
             reader,
             writer,
@@ -29,7 +29,7 @@ impl<'a> Interceptor<'a> {
                 interceptor.reply_ping().await;
             }
             PacketStage::C2sHandshake => {
-                interceptor.filter_connection(connections_arc.clone(), ip_cache_arc.clone()).await;
+                interceptor.filter_connection().await;
             }
             _ => { }
         }
@@ -37,15 +37,13 @@ impl<'a> Interceptor<'a> {
         interceptor
     }
 
-    async fn filter_connection(&mut self, connections_arc: Arc<Mutex<HashMap<String, usize>>>, ip_cache_arc: Arc<Mutex<HashMap<i64, String>>>) {
+    async fn filter_connection(&mut self) {
         let peek_len = self.peek().await;
 
         if let Ok(packet) = C2sHandshakePacket::decode(&mut &self.raw_buffer[..peek_len]) {
             match packet.next {
                 PacketState::Login => {
                     let ip = self.reader.peer_addr().unwrap().ip().to_string();
-                    let connections = connections_arc.lock().await.clone();
-                    let connections = connections.get(&ip).unwrap();
 
                     if VPN_PROTECTION {
                         if ip_blacklisted(ip.clone()).await {
@@ -56,7 +54,7 @@ impl<'a> Interceptor<'a> {
                         }
                     }
 
-                    if connections > &IP_CONCURRENT_LIMIT {
+                    if CONNECTIONS.lock().await.get(&ip).unwrap() > &IP_CONCURRENT_LIMIT {
                         self.writer.write(&disconnect_with_reason(Text::from("More connection"))).await.unwrap();
                         self.info_log("Connection rejected because: Max connection excedeed");
                         self.intercepted();
@@ -64,7 +62,7 @@ impl<'a> Interceptor<'a> {
                     }
 
                     if PING_PROTECTION {
-                        if let None = ip_cache_arc.lock().await.values().find(|&v| v == &ip) {
+                        if let None = IP_CACHE.lock().await.values().find(|&v| v == &ip) {
                             self.writer.write(&disconnect_with_reason(Text::from("Not cached"))).await.unwrap();
                             self.info_log("Connection rejected because: IP is not cached");
                             self.intercepted();
