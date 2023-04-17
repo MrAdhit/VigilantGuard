@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 
+use chrono::{Utc, Datelike, Timelike};
 use proc_macro::{TokenStream, Literal};
 use quote::__private::Span;
 use syn::{parse_macro_input, DeriveInput, Ident};
+use rand::{distributions::Alphanumeric, Rng};
 
 extern crate proc_macro;
 
@@ -73,6 +75,26 @@ pub fn parse_packet_header(_attr: TokenStream, item: TokenStream) -> TokenStream
 enum HashMapParse {
     KEY,
     VAL
+}
+
+#[proc_macro]
+pub fn random_id(input: TokenStream) -> TokenStream {
+    let res: String = rand::thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(5)
+        .map(char::from)
+        .collect();
+
+    let time = Utc::now();
+
+    let year = time.year();
+    let month = time.month();
+    let date = time.day();
+
+    let hour = time.hour();
+    let minute = time.minute();
+
+    format!("const {}: &str = \"{year}-{month:0>2}-{date:0>2}_{hour:0>2}-{minute:0>2}_{}\";", input.to_string().replace("\"", ""), res.to_lowercase()).parse().unwrap()
 }
 
 #[proc_macro]

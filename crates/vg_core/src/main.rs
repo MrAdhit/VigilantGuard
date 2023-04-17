@@ -14,6 +14,7 @@ use once_cell::sync::Lazy;
 use packet::*;
 
 use tokio::{net::{TcpStream, TcpListener}, sync::Mutex, runtime::Runtime};
+use vg_macro::random_id;
 
 use crate::interceptor::{front, middle};
 
@@ -31,6 +32,8 @@ lazy_static! {
     static ref IP_CACHE: Mutex<HashMap<i64, String>> = Mutex::new(HashMap::new());
     static ref CONNECTIONS: Mutex<HashMap<String, usize>> = Mutex::new(HashMap::new());
 }
+
+random_id!("BUILD_ID");
 
 const PING_PROTECTION: bool = true;
 const IP_CONCURRENT_LIMIT: usize = 1;
@@ -107,6 +110,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server_address = "127.0.0.1:25577";
 
     terminal::setup().expect("Failed to setup interactive terminal!");
+
+    info!("{}", colorizer!("Loading VigilantGuard build ({})", BUILD_ID));
 
     let proxy_address = proxy_address.to_socket_addrs()?.next().unwrap();
     let server_address = server_address.to_socket_addrs()?.next().unwrap();

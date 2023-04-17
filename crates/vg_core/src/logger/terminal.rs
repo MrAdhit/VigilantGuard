@@ -50,7 +50,6 @@ pub fn setup() -> Result<(), ()> {
 
     let patt = "[{d(%H:%M:%S)}] {([{T}/{h({l})}]):<12}: {m}\x1b[0m\n";
 
-    // let stdout = ConsoleAppender::builder().encoder(Box::new(PatternEncoder::new(patt))).build();
     let stdout = LogAppender {
         printer: Mutex::new(move |v| { printer.print(v).unwrap() }),
         encoder: Box::new(PatternEncoder::new(patt))
