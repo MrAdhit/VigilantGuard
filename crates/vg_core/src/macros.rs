@@ -27,27 +27,24 @@ macro_rules! encode_packet {
     };
 }
 
-// #[macro_export]
-// macro_rules! colorizer {
-//     ($fmt_str:literal) => {{
-//         format!($fmt_str)
-//         .replace("c(reset)", "\x1b[0m")
-//         .replace("c(on_blue)", "\x1b[1;36;46m")
-//         .replace("c(dark_blue)", "\x1b[0;36m")
-//         .replace("c(on_red)", "\\x1b[1;31;41m")
-//         .replace("c(dark_red)", "\x1b[0;31m")
-//         .replace("c(bright_red)", "\x1b[1;31m")
-//     }};
-//     ($fmt_str:literal, $($args:expr),*) => {{
-//         format!($fmt_str, $($args),*)
-//         .replace("c(reset)", "\x1b[0m")
-//         .replace("c(on_blue)", "\x1b[1;36;46m")
-//         .replace("c(dark_blue)", "\x1b[0;36m")
-//         .replace("c(on_red)", "\x1b[1;31;41m")
-//         .replace("c(dark_red)", "\x1b[0;31m")
-//         .replace("c(bright_red)", "\x1b[1;31m")
-//     }}
-// }
+#[macro_export]
+macro_rules! make_bytes {
+    ($packet:expr) => {{
+        let mut temp_enc = valence_protocol::encoder::PacketEncoder::new();
+        temp_enc.append_packet(&$packet).unwrap();
+        temp_enc.take()
+    }};
+}
+
+#[macro_export]
+macro_rules! make_gatekeeper {
+    ($direction:expr; $types:ident; $closure:expr) => {
+        $direction.lock().await.gatekeeper::<$types, _, _>($closure).await?
+    };
+    ($direction:expr; $types:ident) => {
+        $direction.lock().await.gatekeeper::<$types, _, _>(|packet, _| async move { (InterceptResult::PASSTHROUGH, packet) }).await?
+    }
+}
 
 create_colorizer! {
     "reset" = "\x1b[0m"

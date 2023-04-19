@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use chrono::{Utc, Datelike, Timelike};
-use proc_macro::{TokenStream, Literal};
+use proc_macro::{TokenStream};
 use quote::__private::Span;
 use syn::{parse_macro_input, DeriveInput, Ident};
 use rand::{distributions::Alphanumeric, Rng};
@@ -103,7 +103,7 @@ pub fn create_colorizer(input: TokenStream) -> TokenStream {
 
     let mut stage = HashMapParse::KEY;
     let mut temp_persist = String::new();
-    for (i, t) in input.into_iter().enumerate() {
+    for (_, t) in input.into_iter().enumerate() {
         if !t.to_string().contains("\"") { continue; }
         let ident = t.to_string().replace("\"", "");
 

@@ -5,18 +5,18 @@ pub mod guardian;
 mod logger;
 mod file;
 
-use std::{net::{SocketAddr, ToSocketAddrs}, sync::{Arc}, collections::HashMap};
+use std::{net::{SocketAddr, ToSocketAddrs}, collections::HashMap};
 
 use atomic_float::AtomicF64;
+use interceptor::{interceptor::{Interceptor, InterceptResult}, gate};
 use log::{info, trace};
 use logger::terminal;
 use once_cell::sync::Lazy;
 use packet::*;
 
-use tokio::{net::{TcpStream, TcpListener}, sync::Mutex, runtime::Runtime};
-use vg_macro::random_id;
-
-use crate::interceptor::{front, middle};
+use tokio::{net::{TcpStream, TcpListener, tcp::{OwnedReadHalf, OwnedWriteHalf}}, sync::{Mutex}, runtime::Runtime, io::{AsyncReadExt, AsyncWriteExt}};
+use valence_protocol::{encoder::PacketEncoder, decoder::PacketDecoder, bytes::BytesMut, packet::{c2s::{handshake::{handshake::NextState}, status::{QueryRequestC2s, QueryPingC2s}, login::LoginHelloC2s}, s2c::{status::{QueryPongS2c}}}};
+use vg_macro::{random_id};
 
 #[macro_use]
 extern crate lazy_static;
@@ -37,37 +37,112 @@ random_id!("BUILD_ID");
 
 const PING_PROTECTION: bool = true;
 const IP_CONCURRENT_LIMIT: usize = 1;
+const PING_FORWARD: bool = false;
 const IP_FORWARD: bool = true;
 const VPN_PROTECTION: bool = true;
 
-async fn proxy(client: TcpStream, server: TcpStream, state: PacketState) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client_reader, mut client_writer) = client.into_split();
-    let (mut server_reader, mut server_writer) = server.into_split();
+async fn proxy(client: TcpStream, server: TcpStream) -> anyhow::Result<()> {
+    let (client_reader, client_writer) = client.into_split();
+    let (server_reader, server_writer) = server.into_split();
 
-    let _state = Arc::new(Mutex::new(state));
-    let packet_stage = Arc::new(Mutex::new(PacketStage::C2sHandshake));
+    let c2s = Mutex::new(Interceptor {
+        direction: PacketDirection::C2S,
+        reader: Some(client_reader),
+        writer: Some(server_writer),
+        encoder: PacketEncoder::new(),
+        decoder: PacketDecoder::new(),
+        frame: BytesMut::new(),
+        other: None,
+    });
 
-    let (mut buf, mut buf1) = ([0u8; 4096], [0u8; 4096]);
+    let s2c = Mutex::new(Interceptor {
+        direction: PacketDirection::S2C,
+        reader: Some(server_reader),
+        writer: Some(client_writer),
+        encoder: PacketEncoder::new(),
+        decoder: PacketDecoder::new(),
+        frame: BytesMut::new(),
+        other: None,
+    });
 
-    loop {
-        if front::Interceptor::init(&mut client_reader, &mut client_writer, packet_stage.clone()).await.intercepted {
-            break;
-        }
+    c2s.lock().await.other = Some(&s2c);
+    s2c.lock().await.other = Some(&c2s);
 
-        let client_to_server = middle::Interceptor::init(&mut client_reader, &mut server_writer, &mut buf, packet_stage.clone());
-        let server_to_client = middle::Interceptor::init(&mut server_reader, &mut client_writer, &mut buf1, packet_stage.clone());
+    let next = make_gatekeeper!(c2s; HandshakeC2sOwn; |mut packet, reader| async move {
+        gate::ip_forward(&mut packet, reader);
 
-        tokio::select! {
-            (len, _) = client_to_server => {
-                if len == 0 { break; }
-            },
-            (len, _) = server_to_client => {
-                if len == 0 { break; }
+        (InterceptResult::PASSTHROUGH, packet)
+    }).next_state;
+
+    match next {
+        NextState::Status => {
+            make_gatekeeper!(c2s; QueryRequestC2s; |packet, reader| async move {
+                gate::ip_cache(reader);
+
+                (InterceptResult::PASSTHROUGH, packet)
+            });
+
+            make_gatekeeper!(s2c; QueryResponseS2cOwn; |mut packet, _| async move {
+                gate::query_response(&mut packet);
+
+                (InterceptResult::PASSTHROUGH, packet)
+            });
+
+            make_gatekeeper!(c2s; QueryPingC2s; |packet, _| async move {
+                if PING_FORWARD {
+                    (InterceptResult::PASSTHROUGH, packet)
+                } else {
+                    (InterceptResult::RETURN(None), packet)
+                }
+            });
+
+            if PING_FORWARD {
+                make_gatekeeper!(s2c; QueryPongS2c);
             }
-        }
+        },
+        NextState::Login => {
+            make_gatekeeper!(c2s; LoginHelloC2s; |packet, reader| async move {
+
+                if let Some(bytes) = gate::concurrency_filter(reader) {
+                    return (InterceptResult::RETURN(Some(bytes)), packet);
+                }
+
+                if let Some(bytes) = gate::ping_filter(reader).await {
+                    return (InterceptResult::RETURN(Some(bytes)), packet);
+                }
+
+                if let Some(bytes) = gate::vpn_filter(reader).await {
+                    return (InterceptResult::RETURN(Some(bytes)), packet);
+                }
+
+                (InterceptResult::PASSTHROUGH, packet)
+            });
+
+            let mut c2s = c2s.lock().await;
+            let mut s2c = s2c.lock().await;
+
+            return tokio::select! {
+                c2s_res = passthrough(c2s.reader.take().unwrap(), c2s.writer.take().unwrap()) => c2s_res,
+                s2c_res = passthrough(s2c.reader.take().unwrap(), s2c.writer.take().unwrap()) => s2c_res,
+            };
+        },
     }
 
-    Ok(())
+    return Ok(());
+}
+
+async fn passthrough(mut read: OwnedReadHalf, mut write: OwnedWriteHalf) -> anyhow::Result<()> {
+    let mut buf = Box::new([0u8; 8192]);
+    loop {
+        let bytes_read = read.read(buf.as_mut_slice()).await?;
+        let bytes = &mut buf[..bytes_read];
+
+        if bytes.is_empty() {
+            break Ok(());
+        }
+
+        write.write_all(bytes).await?;
+    }
 }
 
 async fn accept_loop(proxy_address: SocketAddr, server_address: SocketAddr) {
@@ -82,7 +157,7 @@ async fn accept_loop(proxy_address: SocketAddr, server_address: SocketAddr) {
         let addr;
 
         let client_socket = if let Ok((socket, address)) = listener.accept().await {
-            info!("{}", colorizer!("[/c(dark_blue){address}c(reset)] New Connection"));
+            info!("{}", colorizer!("[/c(dark_blue){address}c(reset)] New connection"));
 
             addr = address.ip().to_string();
 
@@ -93,9 +168,9 @@ async fn accept_loop(proxy_address: SocketAddr, server_address: SocketAddr) {
         
         RUNTIME.spawn(async move {
             if let Ok(server_socket) = TcpStream::connect(server_address).await {
-                let current_state = PacketState::Handshake;
+                server_socket.set_nodelay(true).unwrap();
     
-                proxy(client_socket, server_socket, current_state).await.unwrap();
+                proxy(client_socket, server_socket).await.unwrap();
             }
 
             trace!("Dropping connection with ip {address}", address = addr);
@@ -106,8 +181,8 @@ async fn accept_loop(proxy_address: SocketAddr, server_address: SocketAddr) {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let proxy_address = "127.0.0.1:25565";
-    let server_address = "127.0.0.1:25577";
+    let proxy_address = "159.65.140.219:25565";
+    let server_address = "pn-32gb.rapstore.online:25565";
 
     terminal::setup().expect("Failed to setup interactive terminal!");
 
