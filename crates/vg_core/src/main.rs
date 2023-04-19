@@ -186,7 +186,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     terminal::setup().expect("Failed to setup interactive terminal!");
 
-    info!("{}", colorizer!("Loading VigilantGuard build ({})", BUILD_ID));
+    info!("{}", colorizer!("Loading VigilantGuard build ({}-{}-{})", env!("VERGEN_GIT_BRANCH"), env!("VERGEN_GIT_DESCRIBE"), env!("VERGEN_BUILD_DATE")));
 
     let proxy_address = proxy_address.to_socket_addrs()?.next().unwrap();
     let server_address = server_address.to_socket_addrs()?.next().unwrap();
@@ -194,3 +194,5 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     accept_loop(proxy_address, server_address).await;
     Ok(())
 }
+
+// TODO: Add config system
