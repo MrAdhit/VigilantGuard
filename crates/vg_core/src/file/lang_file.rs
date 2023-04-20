@@ -5,12 +5,6 @@ use std::io::{Read, Write};
 
 use serde::{Deserialize, Serialize};
 
-macro_rules! lang_colorize {
-    ($lang:expr) => {
-        $lang: self.$lang.colorize()
-    };
-}
-
 #[derive(Serialize, Deserialize)]
 pub struct Lang {
     pub player_ping_not_cached_kick: String,
