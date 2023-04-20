@@ -18,6 +18,8 @@ use tokio::{net::{TcpStream, TcpListener, tcp::{OwnedReadHalf, OwnedWriteHalf}},
 use valence_protocol::{encoder::PacketEncoder, decoder::PacketDecoder, bytes::BytesMut, packet::{c2s::{handshake::{handshake::NextState}, status::{QueryRequestC2s, QueryPingC2s}, login::LoginHelloC2s}, s2c::{status::{QueryPongS2c}}}};
 use vg_macro::{random_id};
 
+use crate::file::{VIGILANT_CONFIG, VIGILANT_LANG};
+
 #[macro_use]
 extern crate lazy_static;
 
@@ -36,7 +38,7 @@ lazy_static! {
 random_id!("BUILD_ID");
 
 const PING_PROTECTION: bool = true;
-const IP_CONCURRENT_LIMIT: usize = 1;
+const IP_CONCURRENT_LIMIT: usize = 3;
 const PING_FORWARD: bool = false;
 const IP_FORWARD: bool = true;
 const VPN_PROTECTION: bool = true;
@@ -157,11 +159,11 @@ async fn accept_loop(proxy_address: SocketAddr, server_address: SocketAddr) {
         let addr;
 
         let client_socket = if let Ok((socket, address)) = listener.accept().await {
-            info!("{}", colorizer!("[/c(dark_blue){address}c(reset)] New connection"));
+            info!("{}", colorizer!("[/c(dark_blue){address}c(reset)] Open connection"));
 
-            addr = address.ip().to_string();
+            addr = address;
 
-            *CONNECTIONS.lock().await.entry(addr.clone()).or_insert(0) += 1;
+            *CONNECTIONS.lock().await.entry(addr.clone().ip().to_string()).or_insert(0) += 1;
             
             socket
         } else { panic!("Failed to accept a new connection") };
@@ -170,29 +172,41 @@ async fn accept_loop(proxy_address: SocketAddr, server_address: SocketAddr) {
             if let Ok(server_socket) = TcpStream::connect(server_address).await {
                 server_socket.set_nodelay(true).unwrap();
     
-                proxy(client_socket, server_socket).await.unwrap();
+                if let Err(err) = proxy(client_socket, server_socket).await {
+                    log::error!("{}", colorizer!("[/c(dark_blue){}c(reset)] {}", addr.to_string(), err.to_string()));
+                }
             }
 
-            trace!("Dropping connection with ip {address}", address = addr);
-            CONNECTIONS.lock().await.entry(addr).and_modify(|v| *v -= 1);
+            info!("{}", colorizer!("[/c(dark_blue){}c(reset)] Close connection", addr.to_string()));
+            CONNECTIONS.lock().await.entry(addr.ip().to_string()).and_modify(|v| *v -= 1);
         });
+    }
+}
+
+fn wip_config_warn() {
+    if !VIGILANT_CONFIG.proxy.motd_forward {
+        log::warn!("{}", colorizer!("c(on_yellow) MOTD INTERCEPT IS WIP!! "));
+        log::warn!("{}", colorizer!("c(on_yellow) DO NOT SET THIS TO FALSE IF THIS IS IN PRODUCTION!!! "));
     }
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let proxy_address = "159.65.140.219:25565";
-    let server_address = "pn-32gb.rapstore.online:25565";
-
+    
+    let proxy_address = &format!("{}:{}", VIGILANT_CONFIG.proxy.ip, VIGILANT_CONFIG.proxy.port);
+    let server_address = &format!("{}:{}", VIGILANT_CONFIG.server.ip, VIGILANT_CONFIG.server.port);
+    
     terminal::setup().expect("Failed to setup interactive terminal!");
-
+    
     info!("{}", colorizer!("Loading VigilantGuard build ({}-{}-{})", env!("VERGEN_GIT_BRANCH"), env!("VERGEN_GIT_DESCRIBE"), env!("VERGEN_BUILD_DATE")));
 
+    let _ = &VIGILANT_LANG.parse_color();
+
+    wip_config_warn();
+    
     let proxy_address = proxy_address.to_socket_addrs()?.next().unwrap();
     let server_address = server_address.to_socket_addrs()?.next().unwrap();
 
     accept_loop(proxy_address, server_address).await;
     Ok(())
 }
-
-// TODO: Add config system

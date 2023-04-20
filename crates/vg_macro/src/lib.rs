@@ -119,14 +119,20 @@ pub fn create_colorizer(input: TokenStream) -> TokenStream {
         }
     }
 
+    let mut rpl_vec_n = Vec::new();
     let mut rpl_vec = Vec::new();
 
-    for (k, v) in map {
+    for (k, v) in map.clone() {
         rpl_vec.push(format!(".replace(\"c({k})\", \"{v}\")"));
     }
+
+    for (k, v) in map {
+        rpl_vec_n.push(format!(".replace(\"c({k})\", \"\")"));
+    }
     
-    let rpl = rpl_vec.join("");    
-    let res = format!(r###"#[macro_export]{}macro_rules! colorizer {{($fmt_str:literal) => {{{{format!($fmt_str){rpl}}}}};($fmt_str:literal, $($args:expr),*) => {{{{format!($fmt_str, $($args),*){rpl}}}}};}}{}pub use colorizer as coloriser;"###, "\n", "\n");
+    let rpl_n = rpl_vec_n.join(" ");
+    let rpl = rpl_vec.join("");
+    let res = format!(r###"#[macro_export]{}macro_rules! colorizer {{($fmt_str:literal) => {{{{if crate::file::VIGILANT_CONFIG.colorize {{format!($fmt_str){rpl}}} else {{ format!($fmt_str){rpl_n} }} }}}};($fmt_str:literal, $($args:expr),*) => {{{{if crate::file::VIGILANT_CONFIG.colorize {{ format!($fmt_str, $($args),*){rpl} }} else {{ format!($fmt_str, $($args),*){rpl_n} }} }}}};}}{}pub use colorizer as coloriser;"###, "\n", "\n");
 
     res.parse().unwrap()
 }
