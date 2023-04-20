@@ -15,7 +15,7 @@ pub struct ProxyConfig {
     pub ip: String,
     pub port: u16,
     pub ip_forward: bool,
-    pub port_forward: bool,
+    pub ping_forward: bool,
     pub motd_forward: bool,
 }
 
@@ -68,7 +68,7 @@ colorize = true
 ip = "0.0.0.0"
 port = 25565
 ip_forward = true
-port_forward = false
+ping_forward = false
 motd_forward = true
 
 [server]

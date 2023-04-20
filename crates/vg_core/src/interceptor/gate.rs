@@ -5,7 +5,7 @@ use serde_json::Value;
 use tokio::net::tcp::OwnedReadHalf;
 use valence_protocol::{text::Text, bytes::BytesMut, packet::s2c::login::LoginDisconnectS2c};
 
-use crate::{PING_PROTECTION, RUNTIME, IP_CACHE, packet::{QueryResponseS2cOwn, HandshakeC2sOwn}, make_bytes, CONNECTIONS, IP_CONCURRENT_LIMIT, IP_FORWARD, VPN_PROTECTION, guardian::ip_blacklisted, file::{VIGILANT_CONFIG, VIGILANT_LANG}};
+use crate::{RUNTIME, IP_CACHE, packet::{QueryResponseS2cOwn, HandshakeC2sOwn}, make_bytes, CONNECTIONS, guardian::ip_blacklisted, file::{VIGILANT_CONFIG, VIGILANT_LANG}};
 
 pub fn ip_cache(reader: &OwnedReadHalf) {
     let ip = reader.peer_addr().unwrap().ip().to_string();

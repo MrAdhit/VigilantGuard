@@ -9,14 +9,13 @@ use std::{net::{SocketAddr, ToSocketAddrs}, collections::HashMap, io::ErrorKind,
 
 use atomic_float::AtomicF64;
 use interceptor::{interceptor::{Interceptor, InterceptResult}, gate};
-use log::{info, trace};
+use log::{info};
 use logger::terminal;
 use once_cell::sync::Lazy;
 use packet::*;
 
 use tokio::{net::{TcpStream, TcpListener, tcp::{OwnedReadHalf, OwnedWriteHalf}}, sync::{Mutex}, runtime::Runtime, io::{AsyncReadExt, AsyncWriteExt}};
 use valence_protocol::{encoder::PacketEncoder, decoder::PacketDecoder, bytes::BytesMut, packet::{c2s::{handshake::{handshake::NextState}, status::{QueryRequestC2s, QueryPingC2s}, login::LoginHelloC2s}, s2c::{status::{QueryPongS2c}, login::LoginDisconnectS2c}}, text::Text};
-use vg_macro::{random_id};
 
 use crate::file::{VIGILANT_CONFIG, VIGILANT_LANG};
 
@@ -34,14 +33,6 @@ lazy_static! {
     static ref IP_CACHE: Mutex<HashMap<i64, String>> = Mutex::new(HashMap::new());
     static ref CONNECTIONS: Mutex<HashMap<String, usize>> = Mutex::new(HashMap::new());
 }
-
-random_id!("BUILD_ID");
-
-const PING_PROTECTION: bool = true;
-const IP_CONCURRENT_LIMIT: usize = 3;
-const PING_FORWARD: bool = false;
-const IP_FORWARD: bool = true;
-const VPN_PROTECTION: bool = true;
 
 async fn proxy(client: TcpStream, server: TcpStream, alive: bool) -> anyhow::Result<()> {
     let (client_reader, client_writer) = client.into_split();
@@ -121,14 +112,14 @@ async fn proxy(client: TcpStream, server: TcpStream, alive: bool) -> anyhow::Res
             });
 
             make_gatekeeper!(c2s; QueryPingC2s; |packet, _| async move {
-                if PING_FORWARD {
+                if VIGILANT_CONFIG.proxy.ping_forward {
                     (InterceptResult::PASSTHROUGH, packet)
                 } else {
                     (InterceptResult::RETURN(None), packet)
                 }
             });
 
-            if PING_FORWARD {
+            if VIGILANT_CONFIG.proxy.ping_forward {
                 make_gatekeeper!(s2c; QueryPongS2c);
             }
         },
