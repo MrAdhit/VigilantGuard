@@ -5,7 +5,7 @@ pub mod guardian;
 mod logger;
 mod file;
 
-use std::{net::{SocketAddr, ToSocketAddrs}, collections::HashMap};
+use std::{net::{SocketAddr, ToSocketAddrs}, collections::HashMap, io::ErrorKind, borrow::Cow};
 
 use atomic_float::AtomicF64;
 use interceptor::{interceptor::{Interceptor, InterceptResult}, gate};
@@ -15,7 +15,7 @@ use once_cell::sync::Lazy;
 use packet::*;
 
 use tokio::{net::{TcpStream, TcpListener, tcp::{OwnedReadHalf, OwnedWriteHalf}}, sync::{Mutex}, runtime::Runtime, io::{AsyncReadExt, AsyncWriteExt}};
-use valence_protocol::{encoder::PacketEncoder, decoder::PacketDecoder, bytes::BytesMut, packet::{c2s::{handshake::{handshake::NextState}, status::{QueryRequestC2s, QueryPingC2s}, login::LoginHelloC2s}, s2c::{status::{QueryPongS2c}}}};
+use valence_protocol::{encoder::PacketEncoder, decoder::PacketDecoder, bytes::BytesMut, packet::{c2s::{handshake::{handshake::NextState}, status::{QueryRequestC2s, QueryPingC2s}, login::LoginHelloC2s}, s2c::{status::{QueryPongS2c}, login::LoginDisconnectS2c}}, text::Text};
 use vg_macro::{random_id};
 
 use crate::file::{VIGILANT_CONFIG, VIGILANT_LANG};
@@ -43,7 +43,7 @@ const PING_FORWARD: bool = false;
 const IP_FORWARD: bool = true;
 const VPN_PROTECTION: bool = true;
 
-async fn proxy(client: TcpStream, server: TcpStream) -> anyhow::Result<()> {
+async fn proxy(client: TcpStream, server: TcpStream, alive: bool) -> anyhow::Result<()> {
     let (client_reader, client_writer) = client.into_split();
     let (server_reader, server_writer) = server.into_split();
 
@@ -69,6 +69,36 @@ async fn proxy(client: TcpStream, server: TcpStream) -> anyhow::Result<()> {
 
     c2s.lock().await.other = Some(&s2c);
     s2c.lock().await.other = Some(&c2s);
+
+    if !alive {
+        let next = make_gatekeeper!(c2s; HandshakeC2sOwn; |packet, _| async move {
+            (InterceptResult::PASSTHROUGH, packet)
+        }).next_state;
+
+        match next {
+            NextState::Status => {
+                make_gatekeeper!(c2s; QueryRequestC2s; |packet, _| async move {
+                    let motd = QueryResponseS2cOwn {
+                        json: format!("{{\n\"version\":{{\n\"name\":\"{}\",\n\"protocol\":999\n}},\n\"players\":{{\n\"max\":0,\n\"online\":0,\n\"sample\":[]\n}},\n\"description\":{{\n\"text\":\"{}\"\n}},\n\"favicon\":\"data:image/png;base64,\",\n\"enforcesSecureChat\":true\n}}", VIGILANT_LANG.server_offline_version_name, VIGILANT_LANG.server_offline_motd)
+                    };
+
+                    (InterceptResult::RETURN(Some(make_bytes!(motd))), packet)
+                });
+
+                make_gatekeeper!(c2s; QueryPingC2s; |packet, _| async move {
+                    (InterceptResult::RETURN(None), packet)
+                });
+            },
+            NextState::Login => {
+                make_gatekeeper!(c2s; LoginHelloC2s; |packet, _| async move {
+                    let reason = make_bytes!(LoginDisconnectS2c { reason: Cow::Owned(Text::from(VIGILANT_LANG.server_offline_kick.clone())) });
+                    (InterceptResult::RETURN(Some(reason)), packet)
+                });
+            },
+        }
+
+        return Ok(());
+    }
 
     let next = make_gatekeeper!(c2s; HandshakeC2sOwn; |mut packet, reader| async move {
         gate::ip_forward(&mut packet, reader);
@@ -169,12 +199,24 @@ async fn accept_loop(proxy_address: SocketAddr, server_address: SocketAddr) {
         } else { panic!("Failed to accept a new connection") };
         
         RUNTIME.spawn(async move {
-            if let Ok(server_socket) = TcpStream::connect(server_address).await {
-                server_socket.set_nodelay(true).unwrap();
+            let server = TcpStream::connect(server_address).await;
+            match server {
+                Ok(server_socket) => {
+                    server_socket.set_nodelay(true).unwrap();
     
-                if let Err(err) = proxy(client_socket, server_socket).await {
-                    log::error!("{}", colorizer!("[/c(dark_blue){}c(reset)] {}", addr.to_string(), err.to_string()));
-                }
+                    if let Err(err) = proxy(client_socket, server_socket, true).await {
+                        log::error!("{}", colorizer!("[/c(dark_blue){}c(reset)] {}", addr.to_string(), err.to_string()));
+                    }
+                },
+                Err(err) => {
+                    if let ErrorKind::ConnectionRefused = err.kind() {
+                        let dummy_server = TcpListener::bind("127.0.0.1:0").await.unwrap();
+                        let dummy_socket = TcpStream::connect(dummy_server.local_addr().unwrap()).await.unwrap();
+                        if let Err(err) = proxy(client_socket, dummy_socket, false).await {
+                            log::error!("{}", colorizer!("[/c(dark_blue){}c(reset)] {}", addr.to_string(), err.to_string()));
+                        }
+                    }
+                },
             }
 
             info!("{}", colorizer!("[/c(dark_blue){}c(reset)] Close connection", addr.to_string()));
@@ -183,16 +225,20 @@ async fn accept_loop(proxy_address: SocketAddr, server_address: SocketAddr) {
     }
 }
 
-fn wip_config_warn() {
+fn config_warn() {
     if !VIGILANT_CONFIG.proxy.motd_forward {
         log::warn!("{}", colorizer!("c(on_yellow) MOTD INTERCEPT IS WIP!! "));
         log::warn!("{}", colorizer!("c(on_yellow) DO NOT SET THIS TO FALSE IF THIS IS IN PRODUCTION!!! "));
+    }
+
+    if !VIGILANT_CONFIG.proxy.ip_forward {
+        log::warn!("{}", colorizer!("c(on_yellow) PLEASE TURN ON IP FORWARD!!! "));
+        log::warn!("{}", colorizer!("c(on_yellow) UNLESS YOU KNOW WHAT YOU'RE DOING! "));
     }
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    
     let proxy_address = &format!("{}:{}", VIGILANT_CONFIG.proxy.ip, VIGILANT_CONFIG.proxy.port);
     let server_address = &format!("{}:{}", VIGILANT_CONFIG.server.ip, VIGILANT_CONFIG.server.port);
     
@@ -200,9 +246,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     info!("{}", colorizer!("Loading VigilantGuard build ({}-{}-{})", env!("VERGEN_GIT_BRANCH"), env!("VERGEN_GIT_DESCRIBE"), env!("VERGEN_BUILD_DATE")));
 
-    let _ = &VIGILANT_LANG.parse_color();
+    let _ = &VIGILANT_LANG.server_offline_kick; // Preload the lang file to memory
 
-    wip_config_warn();
+    config_warn();
     
     let proxy_address = proxy_address.to_socket_addrs()?.next().unwrap();
     let server_address = server_address.to_socket_addrs()?.next().unwrap();

@@ -57,7 +57,7 @@ pub async fn vpn_filter(reader: &OwnedReadHalf) -> Option<BytesMut> {
 
     if VIGILANT_CONFIG.guardian.vpn_filter {
         if ip_blacklisted(ip).await {
-            return Some(make_bytes!(LoginDisconnectS2c { reason: Cow::Owned(Text::from(VIGILANT_LANG.parse_color().player_ip_blacklisted_kick)) }))
+            return Some(make_bytes!(LoginDisconnectS2c { reason: Cow::Owned(Text::from(VIGILANT_LANG.player_ip_blacklisted_kick.clone())) }))
         }
     }
 
@@ -69,7 +69,7 @@ pub fn concurrency_filter(reader: &OwnedReadHalf) -> Option<BytesMut> {
 
     if let Ok(lock) = CONNECTIONS.try_lock() {
         if lock.get(&ip).unwrap() > &VIGILANT_CONFIG.guardian.ip_concurrent_limit {
-            return Some(make_bytes!(LoginDisconnectS2c { reason: Cow::Owned(Text::from(VIGILANT_LANG.parse_color().player_connection_more_kick)) }))
+            return Some(make_bytes!(LoginDisconnectS2c { reason: Cow::Owned(Text::from(VIGILANT_LANG.player_connection_more_kick.clone())) }))
         }
     }
 
@@ -81,7 +81,7 @@ pub async fn ping_filter(reader: &OwnedReadHalf) -> Option<BytesMut> {
 
     if VIGILANT_CONFIG.guardian.ping_protection {
         if let None = IP_CACHE.lock().await.values().find(|&v| v == &ip) {
-            return Some(make_bytes!(LoginDisconnectS2c { reason: Cow::Owned(Text::from(VIGILANT_LANG.parse_color().player_ping_not_cached_kick)) }))
+            return Some(make_bytes!(LoginDisconnectS2c { reason: Cow::Owned(Text::from(VIGILANT_LANG.player_ping_not_cached_kick.clone())) }))
         }
     }
 
