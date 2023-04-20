@@ -1,8 +1,9 @@
-use std::{fs::File, io::{Read, Seek, Write}};
+use std::fs::File;
+use std::io::{Read, Seek, Write};
 
 pub struct IpFilter {
     file: File,
-    items: Vec<String>
+    items: Vec<String>,
 }
 
 impl IpFilter {
@@ -11,10 +12,7 @@ impl IpFilter {
         let mut buf = String::new();
         file.read_to_string(&mut buf).unwrap();
         let items: Vec<String> = buf.split("|").into_iter().map(|v| v.to_string()).collect();
-        Self {
-            file,
-            items
-        }
+        Self { file, items }
     }
 
     pub fn push<S: Into<String>>(&mut self, item: S) {

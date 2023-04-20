@@ -1,2 +1,2 @@
-pub mod terminal;
 mod appender;
+pub mod terminal;

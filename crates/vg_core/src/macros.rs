@@ -43,7 +43,7 @@ macro_rules! make_gatekeeper {
     };
     ($direction:expr; $types:ident) => {
         $direction.lock().await.gatekeeper::<$types, _, _>(|packet, _| async move { (InterceptResult::PASSTHROUGH, packet) }).await?
-    }
+    };
 }
 
 create_colorizer! {

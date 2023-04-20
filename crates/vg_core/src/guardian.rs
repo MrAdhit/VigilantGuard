@@ -1,9 +1,15 @@
 use crate::file::*;
 
 pub async fn ip_blacklisted(ip: String) -> bool {
-    if ip == "127.0.0.1" { return false }
-    if unsafe { IP_BLACKLIST_DB.has(&ip) } { return true }
-    if unsafe { IP_WHITELIST_DB.has(&ip) } { return false }
+    if ip == "127.0.0.1" {
+        return false;
+    }
+    if unsafe { IP_BLACKLIST_DB.has(&ip) } {
+        return true;
+    }
+    if unsafe { IP_WHITELIST_DB.has(&ip) } {
+        return false;
+    }
 
     let resp = reqwest::get(format!("https://proxycheck.io/v2/{ip}?vpn=2&asn=0&risk=1")).await.unwrap().text().await.unwrap();
 

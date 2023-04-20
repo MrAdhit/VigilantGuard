@@ -1,4 +1,7 @@
-use std::{fs::{File, self}, io::{Read, Write}};
+use std::fs::{
+    File, {self}
+};
+use std::io::{Read, Write};
 
 use serde::{Deserialize, Serialize};
 
@@ -29,7 +32,7 @@ pub struct ServerConfig {
 pub struct GuardianConfig {
     pub ping_protection: bool,
     pub ip_concurrent_limit: usize,
-    pub vpn_filter: bool
+    pub vpn_filter: bool,
 }
 
 impl Config {

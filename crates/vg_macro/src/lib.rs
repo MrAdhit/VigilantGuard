@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 
-use chrono::{Utc, Datelike, Timelike};
-use proc_macro::{TokenStream};
+use chrono::{Datelike, Timelike, Utc};
+use proc_macro::TokenStream;
 use quote::__private::Span;
+use rand::distributions::Alphanumeric;
+use rand::Rng;
 use syn::{parse_macro_input, DeriveInput, Ident};
-use rand::{distributions::Alphanumeric, Rng};
 
 extern crate proc_macro;
 
@@ -42,7 +43,7 @@ pub fn derive_to_buffer(input: TokenStream) -> TokenStream {
 
         TokenStream::from(expanded)
     } else {
-        let expanded = quote! {    
+        let expanded = quote! {
             #[derive(Debug, Encode, Decode)]
             struct #name_len {
                 len: VarInt
@@ -74,16 +75,12 @@ pub fn parse_packet_header(_attr: TokenStream, item: TokenStream) -> TokenStream
 
 enum HashMapParse {
     KEY,
-    VAL
+    VAL,
 }
 
 #[proc_macro]
 pub fn random_id(input: TokenStream) -> TokenStream {
-    let res: String = rand::thread_rng()
-        .sample_iter(&Alphanumeric)
-        .take(5)
-        .map(char::from)
-        .collect();
+    let res: String = rand::thread_rng().sample_iter(&Alphanumeric).take(5).map(char::from).collect();
 
     let time = Utc::now();
 
@@ -104,7 +101,9 @@ pub fn create_colorizer(input: TokenStream) -> TokenStream {
     let mut stage = HashMapParse::KEY;
     let mut temp_persist = String::new();
     for (_, t) in input.into_iter().enumerate() {
-        if !t.to_string().contains("\"") { continue; }
+        if !t.to_string().contains("\"") {
+            continue;
+        }
         let ident = t.to_string().replace("\"", "");
 
         match &stage {
@@ -115,7 +114,7 @@ pub fn create_colorizer(input: TokenStream) -> TokenStream {
             HashMapParse::VAL => {
                 map.insert(temp_persist.clone(), ident);
                 stage = HashMapParse::KEY;
-            },
+            }
         }
     }
 
@@ -129,7 +128,7 @@ pub fn create_colorizer(input: TokenStream) -> TokenStream {
     for (k, v) in map {
         rpl_vec_n.push(format!(".replace(\"c({k})\", \"\")"));
     }
-    
+
     let rpl_n = rpl_vec_n.join(" ");
     let rpl = rpl_vec.join("");
     let res = format!(r###"#[macro_export]{}macro_rules! colorizer {{($fmt_str:literal) => {{{{if crate::file::VIGILANT_CONFIG.colorize {{format!($fmt_str){rpl}}} else {{ format!($fmt_str){rpl_n} }} }}}};($fmt_str:literal, $($args:expr),*) => {{{{if crate::file::VIGILANT_CONFIG.colorize {{ format!($fmt_str, $($args),*){rpl} }} else {{ format!($fmt_str, $($args),*){rpl_n} }} }}}};}}{}pub use colorizer as coloriser;"###, "\n", "\n");

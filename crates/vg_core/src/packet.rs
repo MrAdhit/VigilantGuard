@@ -1,6 +1,6 @@
 use valence_protocol::packet::c2s::handshake::handshake::NextState;
-use valence_protocol::{Encode, Decode, Packet};
 use valence_protocol::var_int::VarInt;
+use valence_protocol::{Decode, Encode, Packet};
 
 #[derive(Clone, Debug, Encode, Decode, Packet)]
 #[packet_id = 0x00]
@@ -20,5 +20,5 @@ pub struct HandshakeC2sOwn {
 #[derive(Debug)]
 pub enum PacketDirection {
     C2S,
-    S2C
+    S2C,
 }

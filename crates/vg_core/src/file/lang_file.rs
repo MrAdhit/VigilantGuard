@@ -1,4 +1,7 @@
-use std::{fs::{File, self}, io::{Read, Write}};
+use std::fs::{
+    File, {self}
+};
+use std::io::{Read, Write};
 
 use serde::{Deserialize, Serialize};
 
@@ -15,7 +18,7 @@ pub struct Lang {
     pub player_ip_blacklisted_kick: String,
     pub server_offline_motd: String,
     pub server_offline_version_name: String,
-    pub server_offline_kick: String
+    pub server_offline_kick: String,
 }
 
 impl Lang {
@@ -56,15 +59,11 @@ trait Colorizer {
 }
 
 impl Colorizer for String {
-    fn colorize(&self) -> String {
-        self.replace("&", "§")
-    }
+    fn colorize(&self) -> String { self.replace("&", "§") }
 }
 
 impl Colorizer for &str {
-    fn colorize(&self) -> String {
-        self.replace("&", "§")
-    }
+    fn colorize(&self) -> String { self.replace("&", "§") }
 }
 
 const DEFAULT_LANG: &str = r##"

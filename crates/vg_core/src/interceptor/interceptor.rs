@@ -1,7 +1,12 @@
-use tokio::{net::tcp::{OwnedReadHalf, OwnedWriteHalf}, io::{AsyncWriteExt, AsyncReadExt}, sync::{Mutex}};
-use valence_protocol::{encoder::PacketEncoder, decoder::{PacketDecoder, decode_packet}, bytes::BytesMut, Packet};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
+use tokio::sync::Mutex;
+use valence_protocol::bytes::BytesMut;
+use valence_protocol::decoder::{decode_packet, PacketDecoder};
+use valence_protocol::encoder::PacketEncoder;
+use valence_protocol::Packet;
 
-use crate::packet::{PacketDirection};
+use crate::packet::PacketDirection;
 
 pub enum InterceptResult {
     PASSTHROUGH,
@@ -24,8 +29,7 @@ impl<'b> Interceptor<'b> {
     where
         P: Packet<'a> + 'a,
         F: FnOnce(P, &'a OwnedReadHalf) -> Fut,
-        Fut: futures::Future<Output = (InterceptResult, P)>
-
+        Fut: futures::Future<Output = (InterceptResult, P)>,
     {
         loop {
             if let Some(frame) = self.decoder.try_next_packet()? {
@@ -44,11 +48,11 @@ impl<'b> Interceptor<'b> {
                         let bytes = self.encoder.take();
 
                         self.writer.as_mut().unwrap().write_all(&bytes).await?;
-                    },
+                    }
                     InterceptResult::RETURN(bytes) => {
                         if let Some(bytes) = bytes {
                             let bytes = bytes;
-    
+
                             self.other.unwrap().lock().await.writer.as_mut().unwrap().write_all(&bytes).await?;
                         } else {
                             self.encoder.append_packet(&packet)?;
@@ -57,7 +61,7 @@ impl<'b> Interceptor<'b> {
 
                             self.other.unwrap().lock().await.writer.as_mut().unwrap().write_all(&bytes).await?;
                         }
-                    },
+                    }
                     InterceptResult::IGNORE => {
                         return Ok(packet);
                     }
