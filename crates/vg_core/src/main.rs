@@ -45,6 +45,7 @@ static RUNTIME: Lazy<Runtime> = Lazy::new(|| tokio::runtime::Builder::new_multi_
 lazy_static! {
     static ref IP_CACHE: Mutex<HashMap<i64, String>> = Mutex::new(HashMap::new());
     static ref CONNECTIONS: Mutex<HashMap<String, usize>> = Mutex::new(HashMap::new());
+    static ref PLAYERS: Mutex<HashMap<String, String>> = Mutex::new(HashMap::new());
 }
 
 async fn proxy(client: TcpStream, server: TcpStream, alive: bool) -> anyhow::Result<()> {
@@ -136,6 +137,8 @@ async fn proxy(client: TcpStream, server: TcpStream, alive: bool) -> anyhow::Res
                     return (InterceptResult::RETURN(Some(bytes)), packet);
                 }
 
+                PLAYERS.lock().await.insert(reader.peer_addr().unwrap().to_string(), packet.username.to_string());
+
                 (InterceptResult::PASSTHROUGH, packet)
             });
 
@@ -162,7 +165,12 @@ async fn passthrough(mut read: OwnedReadHalf, mut write: OwnedWriteHalf) -> anyh
             break Ok(());
         }
 
-        write.write_all(bytes).await?;
+        let bytes_write = write.write(bytes).await?;
+
+        unsafe {
+            TOTAL_DOWNLOAD.fetch_add(bytes_read as f64, std::sync::atomic::Ordering::Relaxed);
+            TOTAL_UPLOAD.fetch_add(bytes_write as f64, std::sync::atomic::Ordering::Relaxed);
+        }
     }
 }
 
@@ -210,6 +218,7 @@ async fn accept_loop(proxy_address: SocketAddr, server_address: SocketAddr) {
                 }
             }
 
+            PLAYERS.lock().await.remove(&addr.to_string());
             info!("{}", colorizer!("[/c(dark_blue){}c(reset)] Close connection", addr.to_string()));
             CONNECTIONS.lock().await.entry(addr.ip().to_string()).and_modify(|v| *v -= 1);
         });

@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::sync::atomic::Ordering;
 use std::sync::Mutex;
 use std::thread;
@@ -11,7 +12,7 @@ use rustyline::{DefaultEditor, ExternalPrinter};
 
 use super::appender::LogAppender;
 use crate::macros::coloriser;
-use crate::{TOTAL_DOWNLOAD, TOTAL_UPLOAD};
+use crate::{TOTAL_DOWNLOAD, TOTAL_UPLOAD, CONNECTIONS, RUNTIME, PLAYERS};
 
 pub fn setup() -> Result<(), ()> {
     let mut rl = DefaultEditor::new().unwrap();
@@ -26,17 +27,60 @@ pub fn setup() -> Result<(), ()> {
                     Ok(line) => {
                         rl.add_history_entry(&line).unwrap();
 
-                        match line.as_str() {
-                            "stop" => {
+                        let mut line = line.split(" ").collect::<VecDeque<&str>>();
+                        let cmd = line.pop_front().unwrap_or(&"");
+                        let args = line;
+
+                        match cmd {
+                            "stop" | "exit" => {
                                 info!("{}", coloriser!("c(bright_red)Stopping"));
                                 std::process::exit(0);
                             }
-                            "usage" => unsafe {
-                                info!("\x1b[1;32;42m ⬇ {}MB \x1b[0m\x1b[1;33;43m ⬆ {}MB ", TOTAL_DOWNLOAD.load(Ordering::Relaxed) / 1e+6, TOTAL_UPLOAD.load(Ordering::Relaxed) / 1e+6);
+                            "list" => {
+                                let list_type = args.get(0).unwrap_or(&&"");
+
+                                match *list_type {
+                                    "connection" | "conn" => {
+                                        RUNTIME.spawn(async move {
+                                            let lock = CONNECTIONS.lock().await;
+                                            info!("{} Connections: {:?}", lock.len(), lock);
+                                        });
+                                    }
+                                    "player" => {
+                                        RUNTIME.spawn(async move {
+                                            let lock = PLAYERS.lock().await;
+                                            let list = lock.values().collect::<Vec<&String>>();
+                                            info!("{} Players: {:?}", list.len(), list);
+                                        });
+                                    }
+                                    _ => {
+                                        if list_type.len() > 0 {
+                                            info!("Unknown subcommand {:?}", list_type);
+                                        } else {
+                                            info!("Usage: list [connection, player]");
+                                        }
+                                    }
+                                }
+                            }
+                            "usage" => {
+                                let usage_type = args.get(0).unwrap_or(&&"");
+
+                                match *usage_type {
+                                    "network" | "net" => {
+                                        unsafe { info!("\x1b[1;32;42m ⬇ {}MB \x1b[0m\x1b[1;33;43m ⬆ {}MB ", TOTAL_DOWNLOAD.load(Ordering::Relaxed) / 1e+6, TOTAL_UPLOAD.load(Ordering::Relaxed) / 1e+6); }
+                                    }
+                                    _ => {
+                                        if usage_type.len() > 0 {
+                                            info!("Unknown subcommand {:?}", usage_type);
+                                        } else {
+                                            info!("Usage: usage [network]");
+                                        }
+                                    }
+                                }
                             },
                             _ => {
-                                if line.len() > 0 {
-                                    info!("Unknown command {:?}", line);
+                                if cmd.len() > 0 {
+                                    info!("Unknown command {:?}", cmd);
                                 }
                             }
                         }
