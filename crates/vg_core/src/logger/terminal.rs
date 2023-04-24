@@ -29,7 +29,7 @@ pub fn setup() -> Result<(), ()> {
                         match line.as_str() {
                             "stop" => {
                                 info!("{}", coloriser!("c(bright_red)Stopping"));
-                                std::process::exit(1);
+                                std::process::exit(0);
                             }
                             "usage" => unsafe {
                                 info!("\x1b[1;32;42m ⬇ {}MB \x1b[0m\x1b[1;33;43m ⬆ {}MB ", TOTAL_DOWNLOAD.load(Ordering::Relaxed) / 1e+6, TOTAL_UPLOAD.load(Ordering::Relaxed) / 1e+6);
