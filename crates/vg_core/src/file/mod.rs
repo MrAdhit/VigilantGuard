@@ -1,6 +1,6 @@
 mod config_file;
 mod ip_filter_file;
-mod lang_file;
+pub mod lang_file;
 
 use once_cell::sync::Lazy;
 

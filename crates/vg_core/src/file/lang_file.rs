@@ -11,8 +11,9 @@ pub struct Lang {
     pub player_connection_more_kick: String,
     pub player_ip_blacklisted_kick: String,
     pub server_offline_motd: String,
-    pub server_offline_version_name: String,
+    pub server_version_name: String,
     pub server_offline_kick: String,
+    pub server_motd: String,
 }
 
 impl Lang {
@@ -48,15 +49,17 @@ pub fn parse() -> Lang {
     }
 }
 
-trait Colorizer {
+const COLOR_LIST: [char; 20] = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f', 'l', 'n', 'o', 'k'];
+
+pub trait MinecraftText {
     fn colorize(&self) -> String;
 }
 
-impl Colorizer for String {
+impl MinecraftText for String {
     fn colorize(&self) -> String { self.replace("&", "§") }
 }
 
-impl Colorizer for &str {
+impl MinecraftText for &str {
     fn colorize(&self) -> String { self.replace("&", "§") }
 }
 
@@ -65,7 +68,8 @@ player_ping_not_cached_kick = "&c&lPlease Refresh and Rejoin!"
 player_connection_more_kick = "&c&lYou have excedeed the max connection allowed!"
 player_ip_blacklisted_kick = "&c&lYou may have used a VPN\n&c&lplease contact admin to resolve this issue"
 server_offline_motd = "&cServer Offline"
-server_offline_version_name = "&cVigilantGuard"
 server_offline_kick = "&cServer is Offline"
+server_motd = "&bIntercepted with &nVigilantGuard"
+server_version_name = "&cVigilantGuard"
 
 "##;

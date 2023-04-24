@@ -17,6 +17,11 @@ pub struct Config {
 pub struct ProxyConfig {
     pub ip: String,
     pub port: u16,
+    pub forwarder: ProxyForwarder,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ProxyForwarder {
     pub ip_forward: bool,
     pub ping_forward: bool,
     pub motd_forward: bool,
@@ -30,9 +35,26 @@ pub struct ServerConfig {
 
 #[derive(Serialize, Deserialize)]
 pub struct GuardianConfig {
-    pub ping_protection: bool,
-    pub ip_concurrent_limit: usize,
-    pub vpn_filter: bool,
+    pub ping_protection: PingProtection,
+    pub ip_connection_limit: IPLimiter,
+    pub vpn_filter: VPNFilter,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct PingProtection {
+    pub active: bool,
+    pub reset_interval: u64,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct IPLimiter {
+    pub active: bool,
+    pub limit: usize,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct VPNFilter {
+    pub active: bool,
 }
 
 impl Config {
@@ -70,17 +92,25 @@ colorize = true
 [proxy]
 ip = "0.0.0.0"
 port = 25565
+
+[proxy.forwarder]
 ip_forward = true
 ping_forward = false
-motd_forward = true
+motd_forward = false
 
 [server]
 ip = "127.0.0.1"
 port = 25567
 
-[guardian]
-ping_protection = false
-ip_concurrent_limit = 3
-vpn_filter = false
+[guardian.ping_protection]
+active = false
+reset_interval = 300 # In Seconds
+
+[guardian.ip_connection_limit]
+active = false
+limit = 3
+
+[guardian.vpn_filter]
+active = false
 
 "##;

@@ -67,7 +67,7 @@ async fn proxy(client: TcpStream, server: TcpStream, alive: bool) -> anyhow::Res
             NextState::Status => {
                 make_gatekeeper!(c2s; QueryRequestC2s; |packet, _| async move {
                     let motd = QueryResponseS2cOwn {
-                        json: format!("{{\n\"version\":{{\n\"name\":\"{}\",\n\"protocol\":999\n}},\n\"players\":{{\n\"max\":0,\n\"online\":0,\n\"sample\":[]\n}},\n\"description\":{{\n\"text\":\"{}\"\n}},\n\"favicon\":\"data:image/png;base64,\",\n\"enforcesSecureChat\":true\n}}", VIGILANT_LANG.server_offline_version_name, VIGILANT_LANG.server_offline_motd)
+                        json: format!("{{\n\"version\":{{\n\"name\":\"{}\",\n\"protocol\":999\n}},\n\"players\":{{\n\"max\":0,\n\"online\":0,\n\"sample\":[]\n}},\n\"description\":{{\n\"text\":\"{}\"\n}},\n\"favicon\":\"data:image/png;base64,\",\n\"enforcesSecureChat\":true\n}}", VIGILANT_LANG.server_version_name, VIGILANT_LANG.server_offline_motd)
                     };
 
                     (InterceptResult::RETURN(Some(make_bytes!(motd))), packet)
@@ -110,21 +110,21 @@ async fn proxy(client: TcpStream, server: TcpStream, alive: bool) -> anyhow::Res
             });
 
             make_gatekeeper!(c2s; QueryPingC2s; |packet, _| async move {
-                if VIGILANT_CONFIG.proxy.ping_forward {
+                if VIGILANT_CONFIG.proxy.forwarder.ping_forward {
                     (InterceptResult::PASSTHROUGH, packet)
                 } else {
                     (InterceptResult::RETURN(None), packet)
                 }
             });
 
-            if VIGILANT_CONFIG.proxy.ping_forward {
+            if VIGILANT_CONFIG.proxy.forwarder.ping_forward {
                 make_gatekeeper!(s2c; QueryPongS2c);
             }
         }
         NextState::Login => {
             make_gatekeeper!(c2s; LoginHelloC2s; |packet, reader| async move {
 
-                if let Some(bytes) = gate::concurrency_filter(reader) {
+                if let Some(bytes) = gate::concurrency_filter(reader).await {
                     return (InterceptResult::RETURN(Some(bytes)), packet);
                 }
 
@@ -217,12 +217,12 @@ async fn accept_loop(proxy_address: SocketAddr, server_address: SocketAddr) {
 }
 
 fn config_warn() {
-    if !VIGILANT_CONFIG.proxy.motd_forward {
-        log::warn!("{}", colorizer!("c(on_yellow) MOTD INTERCEPT IS WIP!! "));
-        log::warn!("{}", colorizer!("c(on_yellow) DO NOT SET THIS TO FALSE IF THIS IS IN PRODUCTION!!! "));
-    }
+    // if !VIGILANT_CONFIG.proxy.forwarder.motd_forward {
+    //     log::warn!("{}", colorizer!("c(on_yellow) MOTD INTERCEPT IS WIP!! "));
+    //     log::warn!("{}", colorizer!("c(on_yellow) DO NOT SET THIS TO FALSE IF THIS IS IN PRODUCTION!!! "));
+    // }
 
-    if !VIGILANT_CONFIG.proxy.ip_forward {
+    if !VIGILANT_CONFIG.proxy.forwarder.ip_forward {
         log::warn!("{}", colorizer!("c(on_yellow) PLEASE TURN ON IP FORWARD!!! "));
         log::warn!("{}", colorizer!("c(on_yellow) UNLESS YOU KNOW WHAT YOU'RE DOING! "));
     }
