@@ -1,5 +1,5 @@
 use std::fs::{
-    File, {self}
+    File, {self},
 };
 use std::io::{Read, Write};
 

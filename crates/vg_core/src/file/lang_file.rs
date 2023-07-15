@@ -1,5 +1,5 @@
 use std::fs::{
-    File, {self}
+    File, {self},
 };
 use std::io::{Read, Write};
 
@@ -56,11 +56,15 @@ pub trait MinecraftText {
 }
 
 impl MinecraftText for String {
-    fn colorize(&self) -> String { self.replace("&", "§") }
+    fn colorize(&self) -> String {
+        self.replace("&", "§")
+    }
 }
 
 impl MinecraftText for &str {
-    fn colorize(&self) -> String { self.replace("&", "§") }
+    fn colorize(&self) -> String {
+        self.replace("&", "§")
+    }
 }
 
 const DEFAULT_LANG: &str = r##"

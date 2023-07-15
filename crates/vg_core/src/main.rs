@@ -5,16 +5,15 @@ mod logger;
 pub mod macros;
 pub mod packet;
 
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::io::ErrorKind;
 use std::net::{SocketAddr, ToSocketAddrs};
-use std::sync::Arc;
+
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use atomic_float::AtomicF64;
-use interceptor::gate;
-use interceptor::interceptor::{InterceptResult, Interceptor};
+
+use interceptor::interceptor::Interceptor;
 use log::info;
 use logger::terminal;
 use once_cell::sync::Lazy;
@@ -28,11 +27,7 @@ use valence_protocol::bytes::BytesMut;
 use valence_protocol::decoder::PacketDecoder;
 use valence_protocol::encoder::PacketEncoder;
 use valence_protocol::packet::c2s::handshake::handshake::NextState;
-use valence_protocol::packet::c2s::login::LoginHelloC2s;
-use valence_protocol::packet::c2s::status::{QueryPingC2s, QueryRequestC2s};
-use valence_protocol::packet::s2c::login::LoginDisconnectS2c;
-use valence_protocol::packet::s2c::status::QueryPongS2c;
-use valence_protocol::text::Text;
+
 use vg_macro::make_gatekeeper;
 
 use crate::file::{VIGILANT_CONFIG, VIGILANT_LANG};
@@ -69,10 +64,10 @@ async fn proxy(client: TcpStream, server: TcpStream) -> anyhow::Result<()> {
         match next {
             NextState::Status => {
                 make_gatekeeper!(c2s, QueryRequest);
-            },
+            }
             NextState::Login => {
                 make_gatekeeper!(c2s, LoginHello);
-            },
+            }
         }
 
         return Ok(());
@@ -84,7 +79,7 @@ async fn proxy(client: TcpStream, server: TcpStream) -> anyhow::Result<()> {
             make_gatekeeper!(s2c, QueryResponse);
             make_gatekeeper!(c2s, QueryPing);
             make_gatekeeper!(s2c, QueryPong);
-        },
+        }
         NextState::Login => {
             make_gatekeeper!(c2s, LoginHello);
 
@@ -95,7 +90,7 @@ async fn proxy(client: TcpStream, server: TcpStream) -> anyhow::Result<()> {
                 c2s_res = passthrough(c2s.reader.take().unwrap(), c2s.writer.take().unwrap()) => c2s_res,
                 s2c_res = passthrough(s2c.reader.take().unwrap(), s2c.writer.take().unwrap()) => s2c_res,
             };
-        },
+        }
     }
 
     return Ok(());

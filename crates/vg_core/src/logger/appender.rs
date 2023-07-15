@@ -31,9 +31,13 @@ impl<F: FnMut(String) + Sync + Send + 'static> Append for LogAppender<F> {
         Ok(())
     }
 
-    fn flush(&self) { todo!() }
+    fn flush(&self) {
+        todo!()
+    }
 }
 
 impl<F: FnMut(String) + Sync + Send + 'static> std::fmt::Debug for LogAppender<F> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.debug_struct("LogAppender").field("encoder", &self.encoder).finish() }
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LogAppender").field("encoder", &self.encoder).finish()
+    }
 }

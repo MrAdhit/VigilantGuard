@@ -53,7 +53,7 @@ macro_rules! make_bytes {
 //     ($direction:expr; $types:ident; $closure:expr) => {
 //         $direction.lock().await.gatekeeper::<$types, _, _>($closure).await?
 //     };
-    
+
 //     ($direction:ident; $types:ident) => {
 //         // use vg_macro::{upper, snake};
 //         // gatekeeper!($direction; $types; $direction; $types);

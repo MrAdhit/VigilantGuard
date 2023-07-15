@@ -1,4 +1,4 @@
-use valence_protocol::{Encode, Decode, Packet, var_int::VarInt, packet::c2s::handshake::handshake::NextState};
+use valence_protocol::{Decode, Encode, Packet};
 
 #[derive(Clone, Debug, Encode, Decode, Packet)]
 #[packet_id = 0x00]

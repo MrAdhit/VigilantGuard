@@ -1,13 +1,13 @@
 use std::borrow::Cow;
-use std::net::SocketAddr;
+
 use std::sync::atomic::Ordering;
 use std::thread;
 use std::time::Duration;
 
 use log::info;
-use serde_json::Value;
+
 use tokio::net::tcp::OwnedReadHalf;
-use valence_protocol::Packet;
+
 use valence_protocol::bytes::BytesMut;
 use valence_protocol::packet::s2c::login::LoginDisconnectS2c;
 use valence_protocol::text::Text;
@@ -38,16 +38,13 @@ macro_rules! reject {
 pub struct C2S;
 
 impl C2S {
-    pub async fn handshake(packet: c2s::Handshake, reader: &OwnedReadHalf) -> (InterceptResult, c2s::Handshake) {
-
+    pub async fn handshake(packet: c2s::Handshake, _reader: &OwnedReadHalf) -> (InterceptResult, c2s::Handshake) {
         (InterceptResult::PASSTHROUGH, packet)
     }
 
     pub async fn query_request(packet: c2s::QueryRequest, reader: &OwnedReadHalf) -> (InterceptResult, c2s::QueryRequest) {
         if !SERVER_ALIVE.load(Ordering::Relaxed) {
-            let motd = s2c::QueryResponse {
-                json: format!("{{\n\"version\":{{\n\"name\":\"{}\",\n\"protocol\":999\n}},\n\"players\":{{\n\"max\":0,\n\"online\":0,\n\"sample\":[]\n}},\n\"description\":{{\n\"text\":\"{}\"\n}},\n\"favicon\":\"data:image/png;base64,\",\n\"enforcesSecureChat\":true\n}}", VIGILANT_LANG.server_version_name, VIGILANT_LANG.server_offline_motd)
-            };
+            let motd = s2c::QueryResponse { json: format!("{{\n\"version\":{{\n\"name\":\"{}\",\n\"protocol\":999\n}},\n\"players\":{{\n\"max\":0,\n\"online\":0,\n\"sample\":[]\n}},\n\"description\":{{\n\"text\":\"{}\"\n}},\n\"favicon\":\"data:image/png;base64,\",\n\"enforcesSecureChat\":true\n}}", VIGILANT_LANG.server_version_name, VIGILANT_LANG.server_offline_motd) };
 
             return (InterceptResult::RETURN(Some(make_bytes!(motd))), packet);
         }
@@ -57,13 +54,11 @@ impl C2S {
         (InterceptResult::PASSTHROUGH, packet)
     }
 
-    pub async fn query_ping(packet: c2s::QueryPing, reader: &OwnedReadHalf) -> (InterceptResult, c2s::QueryPing) {
-
+    pub async fn query_ping(packet: c2s::QueryPing, _reader: &OwnedReadHalf) -> (InterceptResult, c2s::QueryPing) {
         (InterceptResult::PASSTHROUGH, packet)
     }
 
     pub async fn login_hello(packet: c2s::LoginHello, reader: &OwnedReadHalf) -> (InterceptResult, c2s::LoginHello) {
-
         if !SERVER_ALIVE.load(Ordering::Relaxed) {
             let reason = LoginDisconnectS2c { reason: Cow::Owned(Text::from(VIGILANT_LANG.server_offline_kick.clone())) };
 
@@ -81,13 +76,11 @@ impl C2S {
 pub struct S2C;
 
 impl S2C {
-    pub async fn query_response(packet: s2c::QueryResponse, reader: &OwnedReadHalf) -> (InterceptResult, s2c::QueryResponse) {
-
+    pub async fn query_response(packet: s2c::QueryResponse, _reader: &OwnedReadHalf) -> (InterceptResult, s2c::QueryResponse) {
         (InterceptResult::PASSTHROUGH, packet)
     }
 
-    pub async fn query_pong(packet: s2c::QueryPong, reader: &OwnedReadHalf) -> (InterceptResult, s2c::QueryPong) {
-
+    pub async fn query_pong(packet: s2c::QueryPong, _reader: &OwnedReadHalf) -> (InterceptResult, s2c::QueryPong) {
         (InterceptResult::PASSTHROUGH, packet)
     }
 }
@@ -99,15 +92,15 @@ pub fn ip_cache(reader: &OwnedReadHalf) {
         if VIGILANT_CONFIG.guardian.ping_protection.active {
             RUNTIME.spawn(async move {
                 let timestamp = chrono::Utc::now().timestamp();
-    
+
                 if let Some(_) = { IP_CACHE.lock().await.values().find(|&v| v == &ip) } {
                     return;
                 }
 
                 drop(IP_CACHE.lock().await.insert(timestamp, ip));
-    
+
                 thread::sleep(Duration::from_secs(VIGILANT_CONFIG.guardian.ping_protection.reset_interval));
-    
+
                 IP_CACHE.lock().await.remove(&timestamp);
             });
         }
