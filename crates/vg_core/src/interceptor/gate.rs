@@ -33,12 +33,12 @@ macro_rules! reject {
     };
 }
 
-// TODO: Finish this protection
-
 pub struct C2S;
 
 impl C2S {
-    pub async fn handshake(packet: c2s::Handshake, _reader: &OwnedReadHalf) -> (InterceptResult, c2s::Handshake) {
+    pub async fn handshake(mut packet: c2s::Handshake, reader: &OwnedReadHalf) -> (InterceptResult, c2s::Handshake) {
+        ip_forward(&mut packet, reader);
+
         (InterceptResult::PASSTHROUGH, packet)
     }
 
@@ -66,6 +66,14 @@ impl C2S {
         }
 
         if let Some(bytes) = ping_filter(reader).await {
+            return (InterceptResult::RETURN(Some(bytes)), packet);
+        }
+
+        if let Some(bytes) = concurrency_filter(reader).await {
+            return (InterceptResult::RETURN(Some(bytes)), packet);
+        }
+
+        if let Some(bytes) = vpn_filter(reader).await {
             return (InterceptResult::RETURN(Some(bytes)), packet);
         }
 

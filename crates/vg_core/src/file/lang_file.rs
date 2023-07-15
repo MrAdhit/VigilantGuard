@@ -67,13 +67,4 @@ impl MinecraftText for &str {
     }
 }
 
-const DEFAULT_LANG: &str = r##"
-player_ping_not_cached_kick = "&c&lPlease Refresh and Rejoin!"
-player_connection_more_kick = "&c&lYou have excedeed the max connection allowed!"
-player_ip_blacklisted_kick = "&c&lYou may have used a VPN\n&c&lplease contact admin to resolve this issue"
-server_offline_motd = "&cServer Offline"
-server_offline_kick = "&cServer is Offline"
-server_motd = "&bIntercepted with &nVigilantGuard"
-server_version_name = "&cVigilantGuard"
-
-"##;
+const DEFAULT_LANG: &str = include_str!("./default/lang.toml");
