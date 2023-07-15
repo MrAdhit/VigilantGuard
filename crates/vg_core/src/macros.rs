@@ -36,15 +36,38 @@ macro_rules! make_bytes {
     }};
 }
 
-#[macro_export]
-macro_rules! make_gatekeeper {
-    ($direction:expr; $types:ident; $closure:expr) => {
-        $direction.lock().await.gatekeeper::<$types, _, _>($closure).await?
-    };
-    ($direction:expr; $types:ident) => {
-        $direction.lock().await.gatekeeper::<$types, _, _>(|packet, _| async move { (InterceptResult::PASSTHROUGH, packet) }).await?
-    };
-}
+// #[macro_export]
+// macro_rules! gatekeeper {
+//     ($direction_smol:ident; $type_camel:ident; $directionbig:ident; $type_snake:ident) => {
+//         $direction_smol.lock().await.gatekeeper::<$type_camel, _, _>(|mut packet, reader| async move {
+//             // let gate = crate::interceptor::gate::$direction_big::process(&mut packet, reader);
+//             // gate.snake!($types);
+
+//             (InterceptResult::PASSTHROUGH, packet)
+//         }).await?
+//     };
+// }
+
+// #[macro_export]
+// macro_rules! make_gatekeeper {
+//     ($direction:expr; $types:ident; $closure:expr) => {
+//         $direction.lock().await.gatekeeper::<$types, _, _>($closure).await?
+//     };
+    
+//     ($direction:ident; $types:ident) => {
+//         // use vg_macro::{upper, snake};
+//         // gatekeeper!($direction; $types; $direction; $types);
+//         make_gatekeeper!($direction; QueryPongS2c; upper!($direction); snake!(QueryPongS2c));
+//     };
+//     ($d_l:ident; $t_c:ident; $d_u:expr; $t_s:expr) => {
+//         $d_l.lock().await.gatekeeper::<$t_c, _, _>(|mut packet, reader| async move {
+//             // let gate = crate::interceptor::gate::$direction_big::process(&mut packet, reader);
+//             // gate.snake!($types);
+
+//             (InterceptResult::PASSTHROUGH, packet)
+//         }).await?
+//     };
+// }
 
 create_colorizer! {
     "reset" = "\x1b[0m"

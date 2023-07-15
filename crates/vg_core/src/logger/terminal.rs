@@ -12,7 +12,7 @@ use rustyline::{DefaultEditor, ExternalPrinter};
 
 use super::appender::LogAppender;
 use crate::macros::coloriser;
-use crate::{TOTAL_DOWNLOAD, TOTAL_UPLOAD, CONNECTIONS, RUNTIME, PLAYERS};
+use crate::{CONNECTIONS, PLAYERS, RUNTIME, TOTAL_DOWNLOAD, TOTAL_UPLOAD};
 
 pub fn setup() -> Result<(), ()> {
     let mut rl = DefaultEditor::new().unwrap();
@@ -66,9 +66,9 @@ pub fn setup() -> Result<(), ()> {
                                 let usage_type = args.get(0).unwrap_or(&&"");
 
                                 match *usage_type {
-                                    "network" | "net" => {
-                                        unsafe { info!("\x1b[1;32;42m ⬇ {}MB \x1b[0m\x1b[1;33;43m ⬆ {}MB ", TOTAL_DOWNLOAD.load(Ordering::Relaxed) / 1e+6, TOTAL_UPLOAD.load(Ordering::Relaxed) / 1e+6); }
-                                    }
+                                    "network" | "net" => unsafe {
+                                        info!("\x1b[1;32;42m ⬇ {}MB \x1b[0m\x1b[1;33;43m ⬆ {}MB ", TOTAL_DOWNLOAD.load(Ordering::Relaxed) / 1e+6, TOTAL_UPLOAD.load(Ordering::Relaxed) / 1e+6);
+                                    },
                                     _ => {
                                         if usage_type.len() > 0 {
                                             info!("Unknown subcommand {:?}", usage_type);
@@ -77,7 +77,7 @@ pub fn setup() -> Result<(), ()> {
                                         }
                                     }
                                 }
-                            },
+                            }
                             _ => {
                                 if cmd.len() > 0 {
                                     info!("Unknown command {:?}", cmd);
@@ -87,7 +87,7 @@ pub fn setup() -> Result<(), ()> {
                     }
                     Err(err) => {
                         if let ReadlineError::Interrupted = err {
-                            std::process::exit(1);
+                            std::process::exit(0);
                         }
 
                         error!("{}", coloriser!("c(bright_red){}", err.to_string()));

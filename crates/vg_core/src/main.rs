@@ -9,6 +9,8 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::io::ErrorKind;
 use std::net::{SocketAddr, ToSocketAddrs};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use atomic_float::AtomicF64;
 use interceptor::gate;
@@ -31,6 +33,7 @@ use valence_protocol::packet::c2s::status::{QueryPingC2s, QueryRequestC2s};
 use valence_protocol::packet::s2c::login::LoginDisconnectS2c;
 use valence_protocol::packet::s2c::status::QueryPongS2c;
 use valence_protocol::text::Text;
+use vg_macro::make_gatekeeper;
 
 use crate::file::{VIGILANT_CONFIG, VIGILANT_LANG};
 
@@ -40,6 +43,8 @@ extern crate lazy_static;
 static mut TOTAL_DOWNLOAD: AtomicF64 = AtomicF64::new(0.0);
 static mut TOTAL_UPLOAD: AtomicF64 = AtomicF64::new(0.0);
 
+static SERVER_ALIVE: AtomicBool = AtomicBool::new(false);
+
 static RUNTIME: Lazy<Runtime> = Lazy::new(|| tokio::runtime::Builder::new_multi_thread().enable_all().thread_name("proxy").build().expect("Failed to create a new runtime"));
 
 lazy_static! {
@@ -48,7 +53,7 @@ lazy_static! {
     static ref PLAYERS: Mutex<HashMap<String, String>> = Mutex::new(HashMap::new());
 }
 
-async fn proxy(client: TcpStream, server: TcpStream, alive: bool) -> anyhow::Result<()> {
+async fn proxy(client: TcpStream, server: TcpStream) -> anyhow::Result<()> {
     let (client_reader, client_writer) = client.into_split();
     let (server_reader, server_writer) = server.into_split();
 
@@ -57,90 +62,31 @@ async fn proxy(client: TcpStream, server: TcpStream, alive: bool) -> anyhow::Res
 
     c2s.lock().await.other = Some(&s2c);
     s2c.lock().await.other = Some(&c2s);
+    
+    let next = make_gatekeeper!(c2s, Handshake).next_state;
 
-    if !alive {
-        let next = make_gatekeeper!(c2s; HandshakeC2sOwn; |packet, _| async move {
-            (InterceptResult::PASSTHROUGH, packet)
-        })
-        .next_state;
-
+    if !SERVER_ALIVE.load(Ordering::Relaxed) {
         match next {
             NextState::Status => {
-                make_gatekeeper!(c2s; QueryRequestC2s; |packet, _| async move {
-                    let motd = QueryResponseS2cOwn {
-                        json: format!("{{\n\"version\":{{\n\"name\":\"{}\",\n\"protocol\":999\n}},\n\"players\":{{\n\"max\":0,\n\"online\":0,\n\"sample\":[]\n}},\n\"description\":{{\n\"text\":\"{}\"\n}},\n\"favicon\":\"data:image/png;base64,\",\n\"enforcesSecureChat\":true\n}}", VIGILANT_LANG.server_version_name, VIGILANT_LANG.server_offline_motd)
-                    };
-
-                    (InterceptResult::RETURN(Some(make_bytes!(motd))), packet)
-                });
-
-                make_gatekeeper!(c2s; QueryPingC2s; |packet, _| async move {
-                    (InterceptResult::RETURN(None), packet)
-                });
-            }
+                make_gatekeeper!(c2s, QueryRequest);
+            },
             NextState::Login => {
-                make_gatekeeper!(c2s; LoginHelloC2s; |packet, _| async move {
-                    let reason = make_bytes!(LoginDisconnectS2c { reason: Cow::Owned(Text::from(VIGILANT_LANG.server_offline_kick.clone())) });
-                    (InterceptResult::RETURN(Some(reason)), packet)
-                });
-            }
+                make_gatekeeper!(c2s, LoginHello);
+            },
         }
 
         return Ok(());
     }
 
-    let next = make_gatekeeper!(c2s; HandshakeC2sOwn; |mut packet, reader| async move {
-        gate::ip_forward(&mut packet, reader);
-
-        (InterceptResult::PASSTHROUGH, packet)
-    })
-    .next_state;
-
     match next {
         NextState::Status => {
-            make_gatekeeper!(c2s; QueryRequestC2s; |packet, reader| async move {
-                gate::ip_cache(reader);
-
-                (InterceptResult::PASSTHROUGH, packet)
-            });
-
-            make_gatekeeper!(s2c; QueryResponseS2cOwn; |mut packet, _| async move {
-                gate::query_response(&mut packet);
-
-                (InterceptResult::PASSTHROUGH, packet)
-            });
-
-            make_gatekeeper!(c2s; QueryPingC2s; |packet, _| async move {
-                if VIGILANT_CONFIG.proxy.forwarder.ping_forward {
-                    (InterceptResult::PASSTHROUGH, packet)
-                } else {
-                    (InterceptResult::RETURN(None), packet)
-                }
-            });
-
-            if VIGILANT_CONFIG.proxy.forwarder.ping_forward {
-                make_gatekeeper!(s2c; QueryPongS2c);
-            }
-        }
+            make_gatekeeper!(c2s, QueryRequest);
+            make_gatekeeper!(s2c, QueryResponse);
+            make_gatekeeper!(c2s, QueryPing);
+            make_gatekeeper!(s2c, QueryPong);
+        },
         NextState::Login => {
-            make_gatekeeper!(c2s; LoginHelloC2s; |packet, reader| async move {
-
-                if let Some(bytes) = gate::concurrency_filter(reader).await {
-                    return (InterceptResult::RETURN(Some(bytes)), packet);
-                }
-
-                if let Some(bytes) = gate::ping_filter(reader).await {
-                    return (InterceptResult::RETURN(Some(bytes)), packet);
-                }
-
-                if let Some(bytes) = gate::vpn_filter(reader).await {
-                    return (InterceptResult::RETURN(Some(bytes)), packet);
-                }
-
-                PLAYERS.lock().await.insert(reader.peer_addr().unwrap().to_string(), packet.username.to_string());
-
-                (InterceptResult::PASSTHROUGH, packet)
-            });
+            make_gatekeeper!(c2s, LoginHello);
 
             let mut c2s = c2s.lock().await;
             let mut s2c = s2c.lock().await;
@@ -149,7 +95,7 @@ async fn proxy(client: TcpStream, server: TcpStream, alive: bool) -> anyhow::Res
                 c2s_res = passthrough(c2s.reader.take().unwrap(), c2s.writer.take().unwrap()) => c2s_res,
                 s2c_res = passthrough(s2c.reader.take().unwrap(), s2c.writer.take().unwrap()) => s2c_res,
             };
-        }
+        },
     }
 
     return Ok(());
@@ -202,16 +148,18 @@ async fn accept_loop(proxy_address: SocketAddr, server_address: SocketAddr) {
             match server {
                 Ok(server_socket) => {
                     server_socket.set_nodelay(true).unwrap();
+                    SERVER_ALIVE.store(true, Ordering::Relaxed);
 
-                    if let Err(err) = proxy(client_socket, server_socket, true).await {
+                    if let Err(err) = proxy(client_socket, server_socket).await {
                         log::error!("{}", colorizer!("[/c(dark_blue){}c(reset)] {}", addr.to_string(), err.to_string()));
                     }
                 }
                 Err(err) => {
                     if let ErrorKind::ConnectionRefused = err.kind() {
+                        SERVER_ALIVE.store(false, Ordering::Relaxed);
                         let dummy_server = TcpListener::bind("127.0.0.1:0").await.unwrap();
                         let dummy_socket = TcpStream::connect(dummy_server.local_addr().unwrap()).await.unwrap();
-                        if let Err(err) = proxy(client_socket, dummy_socket, false).await {
+                        if let Err(err) = proxy(client_socket, dummy_socket).await {
                             log::error!("{}", colorizer!("[/c(dark_blue){}c(reset)] {}", addr.to_string(), err.to_string()));
                         }
                     }

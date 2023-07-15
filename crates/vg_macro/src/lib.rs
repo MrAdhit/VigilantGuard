@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use chrono::{Datelike, Timelike, Utc};
+use convert_case::{Case, Casing};
 use proc_macro::TokenStream;
 use quote::__private::Span;
 use rand::distributions::Alphanumeric;
@@ -92,6 +93,35 @@ pub fn random_id(input: TokenStream) -> TokenStream {
     let minute = time.minute();
 
     format!("const {}: &str = \"{year}-{month:0>2}-{date:0>2}_{hour:0>2}-{minute:0>2}_{}\";", input.to_string().replace("\"", ""), res.to_lowercase()).parse().unwrap()
+}
+
+#[proc_macro]
+pub fn upper(input: TokenStream) -> TokenStream {
+    input.to_string().to_uppercase().parse().unwrap()
+}
+
+#[proc_macro]
+pub fn snake(input: TokenStream) -> TokenStream {
+    input.to_string().to_case(Case::Snake).parse().unwrap()
+}
+
+#[proc_macro]
+pub fn make_gatekeeper(input: TokenStream) -> TokenStream {
+    let input = input.to_string();
+    let (direction, packet_type) = input.split_once(",").unwrap();
+
+    let direction_ident = Ident::new(direction.trim(), Span::call_site());
+    let packet_type_ident = Ident::new(packet_type.trim(), Span::call_site());
+    let direction_upper = Ident::new(&direction.to_uppercase().trim(), Span::call_site());
+    let packet_type_snake = Ident::new(&packet_type.replace("S2c", "").replace("C2s", "").to_case(Case::Snake).trim(), Span::call_site());
+
+    let out = quote! {
+        #direction_ident.lock().await.gatekeeper::<crate::packet::#direction_ident::#packet_type_ident, _, _>(|packet, reader| async move {
+            crate::interceptor::gate::#direction_upper::#packet_type_snake(packet, reader).await
+        }).await?
+    };
+
+    out.into()
 }
 
 #[proc_macro]

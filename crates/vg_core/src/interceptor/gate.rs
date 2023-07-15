@@ -1,20 +1,24 @@
 use std::borrow::Cow;
 use std::net::SocketAddr;
+use std::sync::atomic::Ordering;
 use std::thread;
 use std::time::Duration;
 
 use log::info;
 use serde_json::Value;
 use tokio::net::tcp::OwnedReadHalf;
+use valence_protocol::Packet;
 use valence_protocol::bytes::BytesMut;
 use valence_protocol::packet::s2c::login::LoginDisconnectS2c;
 use valence_protocol::text::Text;
 
 use crate::file::{VIGILANT_CONFIG, VIGILANT_LANG};
 use crate::guardian::ip_blacklisted;
-use crate::packet::{HandshakeC2sOwn, QueryResponseS2cOwn};
 use crate::macros::coloriser;
-use crate::{make_bytes, CONNECTIONS, IP_CACHE, RUNTIME};
+use crate::packet::{c2s, s2c};
+use crate::{make_bytes, CONNECTIONS, IP_CACHE, RUNTIME, SERVER_ALIVE};
+
+use super::interceptor::InterceptResult;
 
 macro_rules! log {
     ($msg:expr,$reader:expr) => {
@@ -29,52 +33,111 @@ macro_rules! reject {
     };
 }
 
-pub fn ip_cache(reader: &OwnedReadHalf) {
-    let ip = reader.peer_addr().unwrap().ip().to_string();
-    if VIGILANT_CONFIG.guardian.ping_protection.active {
-        RUNTIME.spawn(async move {
-            let timestamp = chrono::Utc::now().timestamp();
+// TODO: Finish this protection
 
-            if let Some(_) = { IP_CACHE.lock().await.values().find(|&v| v == &ip) } {
-                return;
-            }
+pub struct C2S;
 
-            {
-                IP_CACHE.lock().await.insert(timestamp, ip)
+impl C2S {
+    pub async fn handshake(packet: c2s::Handshake, reader: &OwnedReadHalf) -> (InterceptResult, c2s::Handshake) {
+
+        (InterceptResult::PASSTHROUGH, packet)
+    }
+
+    pub async fn query_request(packet: c2s::QueryRequest, reader: &OwnedReadHalf) -> (InterceptResult, c2s::QueryRequest) {
+        if !SERVER_ALIVE.load(Ordering::Relaxed) {
+            let motd = s2c::QueryResponse {
+                json: format!("{{\n\"version\":{{\n\"name\":\"{}\",\n\"protocol\":999\n}},\n\"players\":{{\n\"max\":0,\n\"online\":0,\n\"sample\":[]\n}},\n\"description\":{{\n\"text\":\"{}\"\n}},\n\"favicon\":\"data:image/png;base64,\",\n\"enforcesSecureChat\":true\n}}", VIGILANT_LANG.server_version_name, VIGILANT_LANG.server_offline_motd)
             };
 
-            thread::sleep(Duration::from_secs(VIGILANT_CONFIG.guardian.ping_protection.reset_interval));
+            return (InterceptResult::RETURN(Some(make_bytes!(motd))), packet);
+        }
 
-            IP_CACHE.lock().await.remove(&timestamp);
-        });
-        log!("Saving IP", &reader);
+        ip_cache(reader);
+
+        (InterceptResult::PASSTHROUGH, packet)
+    }
+
+    pub async fn query_ping(packet: c2s::QueryPing, reader: &OwnedReadHalf) -> (InterceptResult, c2s::QueryPing) {
+
+        (InterceptResult::PASSTHROUGH, packet)
+    }
+
+    pub async fn login_hello(packet: c2s::LoginHello, reader: &OwnedReadHalf) -> (InterceptResult, c2s::LoginHello) {
+
+        if !SERVER_ALIVE.load(Ordering::Relaxed) {
+            let reason = LoginDisconnectS2c { reason: Cow::Owned(Text::from(VIGILANT_LANG.server_offline_kick.clone())) };
+
+            return (InterceptResult::RETURN(Some(make_bytes!(reason))), packet);
+        }
+
+        if let Some(bytes) = ping_filter(reader).await {
+            return (InterceptResult::RETURN(Some(bytes)), packet);
+        }
+
+        (InterceptResult::PASSTHROUGH, packet)
     }
 }
 
-pub fn ip_forward(packet: &mut HandshakeC2sOwn, reader: &OwnedReadHalf) {
+pub struct S2C;
+
+impl S2C {
+    pub async fn query_response(packet: s2c::QueryResponse, reader: &OwnedReadHalf) -> (InterceptResult, s2c::QueryResponse) {
+
+        (InterceptResult::PASSTHROUGH, packet)
+    }
+
+    pub async fn query_pong(packet: s2c::QueryPong, reader: &OwnedReadHalf) -> (InterceptResult, s2c::QueryPong) {
+
+        (InterceptResult::PASSTHROUGH, packet)
+    }
+}
+
+pub fn ip_cache(reader: &OwnedReadHalf) {
+    let ip = reader.peer_addr().unwrap().ip().to_string();
+    log!("Saving IP", &reader);
+    thread::spawn(move || {
+        if VIGILANT_CONFIG.guardian.ping_protection.active {
+            RUNTIME.spawn(async move {
+                let timestamp = chrono::Utc::now().timestamp();
+    
+                if let Some(_) = { IP_CACHE.lock().await.values().find(|&v| v == &ip) } {
+                    return;
+                }
+
+                drop(IP_CACHE.lock().await.insert(timestamp, ip));
+    
+                thread::sleep(Duration::from_secs(VIGILANT_CONFIG.guardian.ping_protection.reset_interval));
+    
+                IP_CACHE.lock().await.remove(&timestamp);
+            });
+        }
+    });
+}
+
+pub fn ip_forward(packet: &mut c2s::Handshake, reader: &OwnedReadHalf) {
     if VIGILANT_CONFIG.proxy.forwarder.ip_forward {
         packet.server_address = format!("{addr}|{player_addr}", addr = packet.server_address, player_addr = reader.peer_addr().unwrap().ip().to_string());
     }
 }
 
-pub fn query_response(packet: &mut QueryResponseS2cOwn) {
-    if !VIGILANT_CONFIG.proxy.forwarder.motd_forward {
-        let json = serde_json::from_str::<Value>(&packet.json).unwrap();
-        let source = packet.json.to_string();
+// pub fn query_response(packet: &mut c2s::QueryResponse) {
+//     if !VIGILANT_CONFIG.proxy.forwarder.motd_forward {
+//         let json = serde_json::from_str::<Value>(&packet.json).unwrap();
+//         let source = packet.json.to_string();
 
-        let description = Text::from(VIGILANT_LANG.server_motd.clone());
-        let description_from = serde_json::to_string(&json["description"]).unwrap();
-        let description_to = serde_json::to_string(&description).unwrap();
+//         let description = Text::from(VIGILANT_LANG.server_motd.clone());
+//         let description_from = serde_json::to_string(&json["description"]).unwrap();
+//         let description_to = serde_json::to_string(&description).unwrap();
 
-        let version_name = &VIGILANT_LANG.server_version_name;
-        let version_from = serde_json::to_string(&json["version"]["name"]).unwrap();
-        let version_to = serde_json::to_string(&version_name).unwrap();
+//         let version_name = &VIGILANT_LANG.server_version_name;
+//         let version_from = serde_json::to_string(&json["version"]["name"]).unwrap();
+//         let version_to = serde_json::to_string(&version_name).unwrap();
 
-        let source = source.replace(&description_from, &description_to).replace(&version_from, &version_to);
+//         let source = source.replace(&description_from, &description_to).replace(&version_from, &version_to);
 
-        packet.json = source;
-    }
-}
+//         packet.json = source;
+//     }
+// }
 
 pub async fn vpn_filter(reader: &OwnedReadHalf) -> Option<BytesMut> {
     let ip = reader.peer_addr().unwrap().ip().to_string();
@@ -92,7 +155,7 @@ pub async fn concurrency_filter(reader: &OwnedReadHalf) -> Option<BytesMut> {
     let ip = reader.peer_addr().unwrap().ip().to_string();
 
     if VIGILANT_CONFIG.guardian.ip_connection_limit.active {
-        if CONNECTIONS.lock().await .get(&ip).unwrap() >= &VIGILANT_CONFIG.guardian.ip_connection_limit.limit {
+        if CONNECTIONS.lock().await.get(&ip).unwrap() >= &VIGILANT_CONFIG.guardian.ip_connection_limit.limit {
             reject!(VIGILANT_LANG.player_connection_more_kick.clone(), "IP Connection limit is exceeded", reader);
         }
     }
