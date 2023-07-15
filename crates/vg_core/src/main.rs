@@ -62,7 +62,7 @@ async fn proxy(client: TcpStream, server: TcpStream) -> anyhow::Result<()> {
 
     c2s.lock().await.other = Some(&s2c);
     s2c.lock().await.other = Some(&c2s);
-    
+
     let next = make_gatekeeper!(c2s, Handshake).next_state;
 
     if !SERVER_ALIVE.load(Ordering::Relaxed) {
@@ -174,11 +174,6 @@ async fn accept_loop(proxy_address: SocketAddr, server_address: SocketAddr) {
 }
 
 fn config_warn() {
-    // if !VIGILANT_CONFIG.proxy.forwarder.motd_forward {
-    //     log::warn!("{}", colorizer!("c(on_yellow) MOTD INTERCEPT IS WIP!! "));
-    //     log::warn!("{}", colorizer!("c(on_yellow) DO NOT SET THIS TO FALSE IF THIS IS IN PRODUCTION!!! "));
-    // }
-
     if !VIGILANT_CONFIG.proxy.forwarder.ip_forward {
         log::warn!("{}", colorizer!("c(on_yellow) PLEASE TURN ON IP FORWARD!!! "));
         log::warn!("{}", colorizer!("c(on_yellow) UNLESS YOU KNOW WHAT YOU'RE DOING! "));
