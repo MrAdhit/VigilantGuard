@@ -1,0 +1,25 @@
+colorize = true
+
+[proxy]
+ip = "0.0.0.0"
+port = 25565
+
+[proxy.forwarder]
+ip_forward = true
+ping_forward = false
+motd_forward = false
+
+[server]
+ip = "127.0.0.1"
+port = 25567
+
+[guardian.ping_protection]
+active = false
+reset_interval = 300 # In Seconds
+
+[guardian.ip_connection_limit]
+active = false
+limit = 3
+
+[guardian.vpn_filter]
+active = false

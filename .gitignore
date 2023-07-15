@@ -31,7 +31,7 @@ log
 
 *.db.txt
 
-config.toml
-config.toml.*
-lang.toml
-lang.toml.*
+/config.toml
+/config.toml.*
+/lang.toml
+/lang.toml.*
